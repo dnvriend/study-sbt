@@ -300,6 +300,83 @@ The last syntax is new and must be read as:
 Give me the value for the key 'name' in the configuration 'Compile' for the task 'compile'.
 ```
 
+### Custom Configurations
+We can also create our own configurations. Lets start right away by defining a configuration called 'my-config' that 
+will be used by the task 'MyOtherTask':
+
+```scala
+lazy val MyConfig = config("my-config")
+
+lazy val myOtherSetting = settingKey[String]("My other setting")
+
+myOtherSetting := "mysetting for the current project, all configurations and all tasks"
+
+myOtherSetting in MyConfig := "mysetting for the current project, for the MyConfig configuration and all tasks"
+
+myOtherSetting in MyConfig in MyOtherTask := "mysetting for the current project, for the MyConfig configuration for the task MyOtherTask only"
+
+lazy val MyOtherTask = taskKey[Unit]("My other task")
+
+MyOtherTask := {
+    val str = (myOtherSetting in MyConfig in MyOtherTask).value
+    println(str)
+}
+```
+
+We can use our custom configuration like any other:
+
+```bash
+> myOtherSetting
+[info] mysetting for the current project, all configurations and all tasks
+> my-config:myOtherSetting
+[info] mysetting for the current project, for the MyConfig configuration and all tasks
+> my-config:MyOtherTask::myOtherSetting
+[info] mysetting for the current project, for the MyConfig configuration for the task MyOtherTask only
+
+> MyOtherTask
+mysetting for the current project, for the MyConfig configuration for the task MyOtherTask only
+[success] Total time: 0 s, completed 17-feb-2017 14:02:51
+```
+
+### Dependent Tasks
+We can make tasks dependent on one another. Lets create two tasks:
+
+- 'task1' will return the String "Hello",
+- 'task2' will use the value of 'task1', so it is dependent on task1 and will therefor call 'task1' to get its result. You can see here that tasks, like settings, return a value but do that on demand and will be evaluated every time when called. The task 'task2' will return the String "Hello World!", well thats the idea at least! Lets see if it works as intended:
+
+```scala
+lazy val task1 = taskKey[String]("task 1")
+
+lazy val task2 = taskKey[String]("task 2")
+
+task1 := {
+    println("Evaluating task1")
+    "Hello"
+}
+
+task2 := {
+  println("Evaluating task2")
+  s"${task1.value} World!"
+}
+```
+
+Lets try it out:
+
+```bash
+> show task1
+Evaluating task1
+[info] Hello
+[success] Total time: 0 s, completed 17-feb-2017 14:05:38
+
+> show task2
+Evaluating task1
+Evaluating task2
+[info] Hello World!
+[success] Total time: 0 s, completed 17-feb-2017 14:05:40
+```
+
+It works! See, sbt isn't that difficult!
+
 ### Scopes
 Key -> Value pairs play an important role in Sbt as they let us define settings and settings let us configure our build. Keys can easily be configured so that they have a value in a specific Configuration, Task or (Configuration,Task) combination. It is up to the implementation of the Task that needs a the configured value whether or not it looks for the value, so we have to look at the source code of the task for that.
 
