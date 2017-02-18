@@ -377,6 +377,236 @@ Evaluating task2
 
 It works! See, sbt isn't that difficult!
 
+### Tasks for a certain configuration
+Like a Setting, a Task can also have a different value for a different configuration:
+
+```scala
+lazy val task1 = taskKey[String]("task 1")
+
+lazy val task2 = taskKey[String]("task 2")
+
+task1 := {
+    println("Evaluating task1 for current project for all configurations")
+    "Hello all config"
+}
+
+task1 in Test := {
+    println("Evaluating task1 for current project for Test config")
+    "Hello test config"
+}
+
+task1 in Compile := {
+    println("Evaluating task1 for current project for Compile config")
+    "Hello compile config"
+}
+
+
+task2 := {
+  println("Evaluating task2 for current project for all configurations")
+  val task1Value = (task1 in Test).value
+  s"$task1Value World!"
+}
+```
+
+Lets try it out:
+
+```bash
+> show task1
+Evaluating task1 for current project for all configurations
+[info] Hello all config
+[success] Total time: 0 s, completed 18-feb-2017 12:52:08
+
+> show compile:task1
+Evaluating task1 for current project for Compile config
+[info] Hello compile config
+[success] Total time: 0 s, completed 18-feb-2017 12:52:13
+
+> show test:task1
+Evaluating task1 for current project for Test config
+[info] Hello test config
+[success] Total time: 0 s, completed 18-feb-2017 12:52:16
+
+> show task2
+Evaluating task1 for current project for Test config
+Evaluating task2 for current project for all configurations
+[info] Hello test config World!
+[success] Total time: 0 s, completed 18-feb-2017 12:52:22
+```
+
+### Task Dependencies
+In the examples we have created dependencies between two tasks, task1 and task2. In the examples, task2 would ask task1 for its value. In effect the dependency is created in the implementation of the task like so:
+
+```scala
+lazy val task1 = taskKey[String]("task 1")
+
+lazy val task2 = taskKey[String]("task 2")
+
+task1 := {
+    println("Evaluating task1")
+    "Hello"
+}
+
+task2 := {
+  println("Evaluating task2")
+  s"${task1.value} World!"
+}
+```
+
+In the example above we need the evaluated value of task1 to do some computation of our own but what if we just have tasks that do some side effects and all return Unit. What if we need to create a sequence between them, how do we do that? 
+
+For example, we have the following three tasks:
+
+```scala
+lazy val task1 = taskKey[Unit]("task 1")
+
+lazy val task2 = taskKey[Unit]("task 2")
+
+lazy val task3 = taskKey[Unit]("task 3")
+
+task1 := println("Task 1")
+
+task2 := println("Task 2")
+
+task3 := println("Task 3")
+```
+
+Lets try them out:
+
+```bash
+task1> task1
+Task 1
+[success] Total time: 0 s, completed 18-feb-2017 13:24:22
+> task2
+Task 2
+[success] Total time: 0 s, completed 18-feb-2017 13:24:23
+> task3
+Task 3
+[success] Total time: 0 s, completed 18-feb-2017 13:24:25
+```
+
+Say that, when we type task3 the following should happen: 
+
+- first task1 should execute,
+- then task2
+- then task3
+
+How do we do that? Lets find out.
+
+### Dependency Key Operator
+As you may or may not know, Sbt is being simplified which means that a lot of 'exotic operators' are being dropped and only a few operators are being used and in context of a certain use case can be applied. Some of those operators you already know like ':=', '+=', '++=' and so on. 
+
+Because of a [technical reason #1444](https://github.com/sbt/sbt/issues/1444) we still need to use the '<<=' operator which is the 'Dependency Key' operator for some dependencies. No problem if you know what it is and what it does.
+
+Sbt allows us to define the following dependencies between tasks:
+
+- dependsOn: a task depends on another task,
+- triggeredBy: a task is triggered by another task,
+- runBefore: a task is run before another task
+
+For example, we have the previously defined three tasks, and we also have defined a dependency between them:
+
+```scala
+lazy val task1 = taskKey[Unit]("task 1")
+
+lazy val task2 = taskKey[Unit]("task 2")
+
+lazy val task3 = taskKey[Unit]("task 3")
+
+task1 := println("Task 1")
+
+task2 := println("Task 2")
+
+task3 := println("Task 3")
+
+task3 := (task3 dependsOn task2 dependsOn task1).value
+```
+
+When we run task3, which, beside the implementation also has a dependency rule defined as we can see above, the following will happen:
+
+```bash
+> task3
+Task 1
+Task 2
+Task 3
+[success] Total time: 0 s, completed 18-feb-2017 13:24:55
+```
+
+The rule `task3 := (task3 dependsOn task2 dependsOn task1).value` is the new syntax and will be supported by newer versions of sbt.The following syntax will also work but is deprecated:
+
+```scala
+// define a dependency rule using the '<<=' syntax which is deprecated
+task3 <<= task3 dependsOn task2 dependsOn task1
+```
+
+Lets say we want to define the following, I want task1 to be run and then task3 when I type task1. How do we do that? 
+
+```
+lazy val task1 = taskKey[Unit]("task 1")
+
+lazy val task2 = taskKey[Unit]("task 2")
+
+lazy val task3 = taskKey[Unit]("task 3")
+
+task1 := println("Task 1")
+
+task2 := println("Task 2")
+
+task3 := println("Task 3")
+
+// when I type 'task1': task1 -> task3, because task3 is triggeredBy task1
+task3 <<= task3 triggeredBy task1
+```
+
+Lets try it out:
+
+```bash
+> task1
+Task 1
+Task 3
+[success] Total time: 0 s, completed 18-feb-2017 13:42:53
+> task2
+Task 2
+[success] Total time: 0 s, completed 18-feb-2017 13:42:55
+> task3
+Task 3
+[success] Total time: 0 s, completed 18-feb-2017 13:42:56
+```
+
+What has happened here is that the rule `task3 <<= task3 triggeredBy task1` that uses the deprecated '<<=' 'dependency key' operator and we must use it because of technical reasons, has as effect that when we type 'task1', first 'task1' will run and because 'task1' runs, 'task3' will be triggered causing task3 to also be run.
+
+Lets say, I want to define the following, I want task1 to be run and then task3 when I type 'task3', so task1 must run before task3. How do we do that?
+
+```scala
+lazy val task1 = taskKey[Unit]("task 1")
+
+lazy val task2 = taskKey[Unit]("task 2")
+
+lazy val task3 = taskKey[Unit]("task 3")
+
+task1 := println("Task 1")
+
+task2 := println("Task 2")
+
+task3 := println("Task 3")
+
+task1 <<= task1 runBefore task3
+```
+
+Lets try it out:
+
+```bash
+> task1
+Task 1
+[success] Total time: 0 s, completed 18-feb-2017 13:45:44
+> task2
+Task 2
+[success] Total time: 0 s, completed 18-feb-2017 13:45:45
+> task3
+Task 1
+Task 3
+[success] Total time: 0 s, completed 18-feb-2017 13:45:47
+```
+
 ### Scopes
 Key -> Value pairs play an important role in Sbt as they let us define settings and settings let us configure our build. Keys can easily be configured so that they have a value in a specific Configuration, Task or (Configuration,Task) combination. It is up to the implementation of the Task that needs a the configured value whether or not it looks for the value, so we have to look at the source code of the task for that.
 
