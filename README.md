@@ -52,7 +52,7 @@ So a Build builds projects, Projects define themselves using settings, then what
 ```scala
 name := "my-project"
 version := "1.0.0-SNAPSHOT"
-libraryDepencency += "foo" %% "bar" %% "1.0.0"
+libraryDependencies += "foo" %% "bar" %% "1.0.0"
 ```
 
 So a setting is just a Key -> Value pair. What is unique about settings is that the key -> value pair will be initialized by sbt start-up, so when you start SBT. So the values are initialized only once. 
