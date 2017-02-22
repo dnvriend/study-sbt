@@ -695,4 +695,184 @@ All projects and all configuration and all tasks in the current build only.
 ### Global Scope
 The scope Global is handy to define settings that apply to all projects everywhere on your computer or your enterprise, and all of there configurations and all of there tasks. I guess that covers 'Global'. This scope only makes sense if you create plugins and you want to add the setting to all projects everywhere. If you can remember that Keys are scoped on Axis, so (Project/Configuration:Task) then the difference between the scope 'ThisBuild' and 'Global' is that for 'ThisBuild' the axis looks like ({.}/*:*) and for Global the axis looks like (*/*:*).
 
+### Common SBT Commands
+The following sbt commands are handy to know. Of course you can create your own tasks and query for which tasks are available
+by typing `sbt tasks -V`:
+
+```bash
+sbt help                                     # Prints a help summary.
+sbt about                                    # Displays basic information about sbt and the build.
+sbt tasks                                    # Displays the main tasks defined directly or indirectly for the current project.
+sbt tasks -V                                 # Displays all tasks
+sbt settings                                 # Displays the main settings defined directly or indirectly for the current project.
+sbt settings -V                              # Displays all settings
+sbt projects                                 # List the names of available builds and the projects defined in those builds.
+sbt project                                  # Displays the name of the current project.
+sbt project /                                # Changes to the initial project.
+sbt project name                             # Changes to the project with the provided name.
+sbt run                                      # Runs a main class, passing along arguments provided on the command line
+sbt runMain com.github.dnvriend.HelloWorld   # Runs the main class selected by the first argument, passing the remaining arguments to the main method.
+sbt console                                  # Starts the Scala interpreter with the project classes on the classpath.
+sbt compile                                  # Compiles sources.
+sbt clean                                    # Deletes files produced by the build, such as generated sources, compiled classes, and task caches.
+sbt test                                     # Executes all tests.
+sbt testOnly PersonTest                      # Executes the tests provided as arguments or all tests if no arguments are provided.
+sbt ";clean;compile;run"                     # Runs the specified commands.
+```
+
+### SourceGenerators
+The [sourceGenerators](https://github.com/sbt/sbt/blob/0.13/main/src/main/scala/sbt/Keys.scala#L115) setting defines a list of
+tasks that generate sources. A source generation task should generate sources in a subdirectory of `sourceManaged`
+and return a sequence of files generated.
+
+ The key to add the task to is called `sourceGenerators`. Because we want to add the task, and not the value after its execution,
+we use `taskValue` instead of the usual `value`. It should be scoped according to whether the generated files are main (Compile)
+or test (Test) sources.
+
+For example, lets say we want to generate an `BuildInfo.scala` file that contains information about our build. We can do the following:
+
+- create a task 'getBuildInfo' that aggregates information about our build,
+- create a task 'makmakeBuildInfo' that will create the 'Information.scala' file in the sourceManaged dir and stores the
+  information that has been aggregated by 'getBuildInfo' into that file
+- create a 'main.Main' console application that uses the 'BuildInfo.scala' file
+- run the console application
+
+```scala
+val getCommitSha = taskKey[String]("Returns the current git commit SHA")
+
+getCommitSha := {
+  Process("git rev-parse HEAD").lines.head
+}
+
+val getCurrentDate = taskKey[String]("Get current date")
+
+getCurrentDate := {
+  new java.text.SimpleDateFormat("yyyy-HH-mm'T'hh:MM:ss.SSSSXX").format(new java.util.Date())
+}
+
+val getBuildInfo = taskKey[String]("Get information about the build")
+
+getBuildInfo := {
+  s"""Map(
+     |  "name" -> "${name.value}",
+     |  "organization" -> "${organization.value}",
+     |  "version" -> "${version.value}",
+     |  "date" -> "${getCurrentDate.value}",
+     |  "commit" -> "${getCommitSha.value}",
+     |  "scalaVersion" -> "${scalaVersion.value}",
+     |  "libraryDependencies" -> "${libraryDependencies.value}"
+     |)
+   """.stripMargin
+}
+
+val makeBuildInfo = taskKey[Seq[File]]("Makes the BuildInfo.scala file")
+
+makeBuildInfo := {
+  val resourceDir: File = (sourceManaged in Compile).value
+  val configFile: File = new File(resourceDir, "BuildInfo.scala")
+  val content =
+    s"""
+       |package build
+       |
+       |object BuildInfo {
+       |  val info: Map[String, String] = ${getBuildInfo.value}
+       |}
+     """.stripMargin
+  IO.write(configFile, content)
+  Seq(configFile)
+}
+
+sourceGenerators in Compile += makeBuildInfo.taskValue
+```
+
+We need a console application to test it with so put the following class in 'src/main/scala/main':
+
+```scala
+package main
+
+object Main extends App {
+  println(build.BuildInfo.info)
+}
+```
+
+Run the application with 'sbt run'.
+
+### ResourceGenerators
+The [resourceGenerators](https://github.com/sbt/sbt/blob/0.13/main/src/main/scala/sbt/Keys.scala#L116) setting defines a list of
+tasks that generate resources. A resource generation task should generate resources in a subdirectory of `resourceManaged`
+and return a sequence of files generated.
+
+The key to add the task to is called `resourceGenerators`. Because we want to add the task, and not the value after its execution,
+we use `taskValue` instead of the usual `value`. It should be scoped according to whether the generated files are main (Compile)
+or test (Test) resources.
+
+For example, lets say that we want to get the git commit hash of our project and save it in a Typesafe config file named
+'version.config' and put it in the 'resourceManaged' directory, we can do the following:
+
+- create a task 'gitCommitSha' that queries 'git' and parses the response and returns the git hash as a String
+- create a task 'makeVersionConfig' that will create the 'version.config' file in the resourceManaged dir and stores the
+  git commit hash in that file
+- create a 'main.Main' console application that uses the 'version.config' file
+- run the console application
+
+Lets first create the two tasks, you can put the following in 'build.sbt':
+
+```scala
+// we need the typesafe-config library
+libraryDependencies += "com.typesafe" % "config" % "1.3.1"
+
+// 'gitCommitSha' will query 'git' for the SHA of HEAD
+val gitCommitSha = taskKey[String]("Returns the current git commit SHA")
+
+gitCommitSha := {
+  Process("git rev-parse HEAD").lines.head
+}
+
+// 'makeVersionConfig' will create the 'version.config' file
+val makeVersionConfig = taskKey[Seq[File]]("Makes a version config file")
+
+makeVersionConfig := {
+  println("Creating makeVersionConfig")
+  val resourceDir: File = (resourceManaged in Compile).value
+  val configFile: File = new File(resourceDir, "version.config")
+  val gitCommitValue: String = gitCommitSha.value
+  val content = s"""commit-hash="$gitCommitValue""""
+  IO.write(configFile, content)
+  Seq(configFile)
+}
+
+// add the 'makeVersionConfig' Task to the list of resourceGenerators.
+// resourceGenerators is of type: SettingKey[Seq[Task[Seq[File]]]] which
+// means that we can add, well, resourceGenerators to it,
+// like our 'makeVersionConfig' which is a resourceGenerator.
+resourceGenerators in Compile += makeVersionConfig.taskValue
+```
+
+We need a console application to test it with so put the following class in 'src/main/scala/main':
+
+```scala
+package main
+
+import com.typesafe.config.ConfigFactory
+
+import scala.io.Source
+
+object Main extends App {
+  val config = ConfigFactory.parseURL(getClass.getResource("/version.config"))
+  val hashFromConfig = config.getString("commit-hash")
+  val versionConfigFileAsString = Source.fromURL(getClass.getResource("/version.config")).mkString
+  println(
+    s"""
+      |versionConfigFile: $versionConfigFileAsString
+      |hashFromConfig: $hashFromConfig
+    """.stripMargin)
+}
+```
+
+Run the application with 'sbt run'.
+
+## Plugins
+tbd
+
+
 Have fun!
