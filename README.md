@@ -225,6 +225,7 @@ We will now query the value for name for different scopes:
 >
 ```
 
+### Configuration by Task
 A configuration can also be scoped to a specific Task for example add the following to build.sbt:
 
 ```scala
@@ -265,6 +266,23 @@ Sbt will use the next fallback and so on:
 mysetting for the current project, for the Test configuration and all tasks
 [success] Total time: 0 s, completed 17-feb-2017 13:18:38
 ```
+
+### Configuration by Task 'initialCommands in console'
+As we have seen, configurations can be scoped by task. In sbt this type of configuration is used when launching the REPL
+using the 'console' eg: 'sbt console'. We have to configure the 'initialCommands' settingKey which is of type 'String' and
+set the scope to the taskKey 'console':
+
+```scala
+initialCommands in console :=
+"""
+import scalaz._
+import Scalaz._
+import com.github.dnvriend._
+val xs = List(1, 2, 3, 4, 5)
+"""
+```
+
+When we launch the REPL from sbt then the following expressions will be evaluated.
 
 ### Keys
 To be able to configure anything in the build, from a Setting to a Task, Keys play an important role because a Key allow us to bind a value to a name. As we have seen, a Key is simply a name that can be created with the method 'settingKey' and 'taskKey', and then you can use the newly created key and bind that key to a specific value in a specific Configuration and Task. For example:
