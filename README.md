@@ -932,4 +932,14 @@ Run the application with 'sbt run'.
 tbd
 
 
+## intellij sbt plugin
+https://intellij-support.jetbrains.com/hc/en-us/community/topics/200381545-Scala
+
+### The SBT-shell
+see: https://youtrack.jetbrains.com/issue/SCL-10984
+The [sbt-shell](https://intellij-support.jetbrains.com/hc/en-us/community/posts/115000117230-Sbt-shell-for-build-an-import) attempts
+to use the sbt shell as a server for running builds and project imports. It's marked as experimental since the communication
+doesn't happen over a proper server protocol (this will only be supported for sbt 1.0) but instead by literally pasting
+commands into the integrated shell and parsing the output.
+
 Have fun!
