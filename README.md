@@ -713,6 +713,45 @@ All projects and all configuration and all tasks in the current build only.
 ### Global Scope
 The scope Global is handy to define settings that apply to all projects everywhere on your computer or your enterprise, and all of there configurations and all of there tasks. I guess that covers 'Global'. This scope only makes sense if you create plugins and you want to add the setting to all projects everywhere. If you can remember that Keys are scoped on Axis, so (Project/Configuration:Task) then the difference between the scope 'ThisBuild' and 'Global' is that for 'ThisBuild' the axis looks like ({.}/*:*) and for Global the axis looks like (*/*:*).
 
+## Parsing user input
+SBT supports [parsing user input](http://www.scala-sbt.org/0.13/docs/Parsing-Input.html) as part of a task. To parse use input we use the `inputKey` eg:
+
+```scala
+import sbt.complete.DefaultParsers._
+
+val hello = inputKey[String]("Hello World")
+
+hello := {
+  val name: String = (Space ~> StringBasic).parsed
+  val greeting = s"Hello $name"
+  streams.value.log.info(greeting)
+  greeting
+}
+```
+
+Sbt uses the sbt-parser-combinator library and parsing user input uses a combination of parsers defined in the
+standard library and your own custom parsers. I have a [study project](https://github.com/dnvriend/sbt-parser-test) that shows how you can use the sbt parser
+library and how to build your own parsers.
+
+It is possible to reuse the `inputTask` by another task, to do that you could do the following:
+
+```scala
+val useHello = taskKey[String]("Using hello")
+
+useHello := {
+  val result = hello.toTask(" Dennis").value
+  val msg = s"useHello: '$result'"
+  streams.value.log(msg)
+  msg
+}
+```
+
+Not that we must use a space, as our parser states that the user input should start with a Space as defined in:
+
+```scala
+val name: String = (Space ~> StringBasic).parsed
+```
+
 ### Common SBT Commands
 The following sbt commands are handy to know. Of course you can create your own tasks and query for which tasks are available
 by typing `sbt tasks -V`:

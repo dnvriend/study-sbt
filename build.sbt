@@ -43,3 +43,23 @@ makeBuildInfo := {
 }
 
 sourceGenerators in Compile += makeBuildInfo.taskValue
+
+import sbt.complete.DefaultParsers._
+
+val hello = inputKey[String]("Hello World")
+
+hello := {
+  val name: String = (Space ~> StringBasic).parsed
+  val greeting = s"Hello $name"
+  streams.value.log.info(greeting)
+  greeting
+}
+
+val useHello = taskKey[String]("Using hello")
+
+useHello := {
+  val result = hello.toTask(" Dennis").value
+  val msg = s"useHello: '$result'"
+  streams.value.log(msg)
+  msg
+}
