@@ -933,7 +933,9 @@ tbd
 
 
 ## intellij sbt plugin
-https://intellij-support.jetbrains.com/hc/en-us/community/topics/200381545-Scala
+- [Scala plugin for IntelliJ IDEA 2017.1](https://blog.jetbrains.com/scala/2017/03/23/scala-plugin-for-intellij-idea-2017-1-cleaner-ui-sbt-shell-repl-worksheet-akka-support-and-more/)
+- [Scala plugin Bugs](https://intellij-support.jetbrains.com/hc/en-us/community/topics/200381545-Scala)
+
 
 ### The SBT-shell
 see: https://youtrack.jetbrains.com/issue/SCL-10984
