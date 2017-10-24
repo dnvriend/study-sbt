@@ -1,7 +1,8 @@
 val getCommitSha = taskKey[String]("Returns the current git commit SHA")
 
 getCommitSha := {
-  Process("git rev-parse HEAD").lines.head
+  import scala.sys.process._
+  "git rev-parse HEAD".lineStream_!.head
 }
 
 val getCurrentDate = taskKey[String]("Get current date")

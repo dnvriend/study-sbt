@@ -551,6 +551,8 @@ Task 3
 
 The rule `task3 := (task3 dependsOn task2 dependsOn task1).value` is the new syntax and will be supported by newer versions of sbt.The following syntax will also work but is deprecated:
 
+Note: If you are using SBT 1.0 or higher, please replace '<<=' with ':='.
+
 ```scala
 // define a dependency rule using the '<<=' syntax which is deprecated
 task3 <<= task3 dependsOn task2 dependsOn task1
@@ -589,6 +591,8 @@ Task 2
 Task 3
 [success] Total time: 0 s, completed 18-feb-2017 13:42:56
 ```
+
+Note: As of SBT v1.0, replace '<<=' with ':='.
 
 What has happened here is that the rule `task3 <<= task3 triggeredBy task1` that uses the deprecated '<<=' 'dependency key' operator and we must use it because of technical reasons, has as effect that when we type 'task1', first 'task1' will run and because 'task1' runs, 'task3' will be triggered causing task3 to also be run.
 
