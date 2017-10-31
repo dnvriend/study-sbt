@@ -41,7 +41,7 @@ When we as developers do not state otherwise (in the build.sbt file for example)
 In the example above, and for 90% of all projects this will be the case. A directory structure like above, most likely with a build.sbt file definiting some settings like eg. a name and a version.
 
 ### Build
-What is the Build. Well, the build is what Sbt knows about what it is it should build. When we do not specify otherwise, sbt will assume a single project in the current directory, but we as developers can define other projects that Sbt should build. So the build says something about one or more projects that Sbt should build.
+What is the [Build](http://www.scala-sbt.org/1.x/docs/Basic-Def.html#What+is+a+build+definition%3F)? Well, the build is just a collection of [Project](http://www.scala-sbt.org/1.x/api/sbt/Project.html)s that Sbt should build. We as developers identify to Sbt which projects there are, where they are located and what their names are. When we do not specify projects, sbt will assume a single project in the current directory, but we as developers can define other projects that Sbt should build. So the build says something about one or more projects that Sbt should build. 
 
 ### Project
 A Build concerns itself with one or more projects, and a projects concerns itself with settings. For example, which libraries should be used to compile the project with, which Scala version to use and maybe which version the project is eg. 1.0.0-SNAPSHOT version etc.
@@ -62,7 +62,7 @@ So a Build builds projects, Projects define themselves using settings, and setti
 
 Because a Task is a Key -> Value pair, just like a Setting (which is also a Key -> Value pair), you can 'call' a Task by just typing the name of the Key and Sbt will evaluate the Key to a value.
 
-We can show the result of either a Setting or a Task using the sbt-console with the help of the 'show' command. For example, when we type 'show name', sbt will evaluate the Key 'name' and return the evaluated value. Of course, because 'name' is a Setting, the initialization has already been done when Sbt started, so it will return the value immediately:
+We can show the result of either a Setting or a Task using the sbt-console with the help of the ['show'](http://www.scala-sbt.org/1.x/docs/Basic-Def.html#Keys+in+sbt+shell) command. For example, when we type 'show name', sbt will evaluate the Key 'name' and return the evaluated value. Of course, because 'name' is a Setting, the initialization has already been done when Sbt started, so it will return the value immediately:
 
 ```scala
 > name
@@ -77,15 +77,15 @@ We can also evaluate a Task. As I stated earlier, a Task is just a Key -> Value 
 [success] Total time: 0 s, completed 17-feb-2017 9:06:18
 ```
 
-The Task clean evaluates to the value 'Unit' which is returned, because it does side effects like deleting the contents of the './target' directory.
+The Task clean evaluates to the value ['()' of type Unit](http://www.scala-lang.org/api/2.12.3/scala/Unit.html) which is returned, because it does side effects like deleting the contents of the './target' directory.
 
 ### Recap until now
 So a Build contains one or more projects. A project defines itself using settings. A Setting is just a Key -> Value pair that is initialized only once and a Task is a Key -> Value pair that will be evaluated on demand.
 
 ### Configurations
-I will assume that you already know a little how sbt works and are already working with it so you know that sbt supports testing. For unit testing you will need for example the [ScalaTest](http://www.scalatest.org/) and if you are creating reactive applications, the [akka-testkit](http://doc.akka.io/docs/akka/2.4/scala/testing.html) library as a dependency. Also, we have split the code that is for testing from our business code. The code bases have different paths, eg. the test code exists in './src/main/test' and this code base has a dependency with the test libraries that our business code doesn't have. 
+I will assume that you already know a little how sbt works and are already working with it so you know that sbt supports testing. For unit testing you will need for example the [ScalaTest](http://www.scalatest.org/) and if you are creating reactive applications, the [akka-testkit](https://doc.akka.io/docs/akka/2.5.4/scala/testing.html) library as a dependency. Also, we have split the code that is for testing from our business code. The code bases have different paths, eg. the test code exists in './src/main/test' and this code base has a dependency with the test libraries that our business code doesn't have. 
 
-Sbt uses Configurations to segment Settings so it knows which setting to use when a certain task is being executed. There are a lot of Configurations defined in Sbt and you can also define your own. We will look into those a little bit later. 
+Sbt uses *Configurations* to segment Settings so it knows which setting to use when a certain task is being executed. There are a lot of Configurations defined in Sbt and you can also define your own. We will look into those a little bit later. 
 
 For example, the key [sourceDirectories](https://github.com/sbt/sbt/blob/1.0.x/main/src/main/scala/sbt/Keys.scala#L140) lists all directories that will be used by sbt to build the project. For example, when we type 'test' then the sourceDirectories for the test configuration will be used. Lets say we want to create our own test Task which we will call 'mytest':
 
@@ -135,7 +135,7 @@ List(
 [success] Total time: 0 s, completed 17-feb-2017 12:56:24
 ```
 
-So the key 'sourceDirectories' has a different value for different scopes and it depends on the implementation of the Task where it looks to get the value of a Key. In our examples we specifically look for a value for `(sourceDirectories in Test).value` to get the value and for `(sourceDirectories in Compile).value`. 
+So the key 'sourceDirectories' has a different value for different [scopes](http://www.scala-sbt.org/1.x/docs/Scopes.html) and it depends on *the implementation of the Task* where it looks to get the value of a Key. In our examples we specifically look for a value for `(sourceDirectories in Test).value` to get the value and for `(sourceDirectories in Compile).value`. 
 
 We can also query sbt for these values without creating a custom Task. For example, to get the value of the key 'sourceDirectories' in the Configuration 'Test' we type:
 
@@ -157,32 +157,31 @@ And for the Configuration 'Compile' we type:
 [info] * /Users/dennis/projects/study-sbt/target/scala-2.12/src_managed/main
 ```
 
-Of course, a setting does not have to exist in a certain Configuration like eg 'name':
+Of course, a setting or a task does not have to exist in a certain Configuration like eg. the task 'test' does exist in the Configuration 'test' (of course):
 
 ```bash
-> test:name
-[error] No such setting/task
-[error] test:name
-[error]
+> test:test
+[info] Done updating.
+[success] Total time: 1 s, completed Oct 31, 2017 7:05:17 AM
 ```
 
-The setting 'name' also doesn't exist in the configuration 'compile':
+But the task 'test' does not exist in the Configuration 'compile':
 
 ```bash
-> compile:name
+> compile:test
 [error] No such setting/task
-[error] compile:name
+[error] compile:test
 [error]
 ```
 
 But when we type the following:
 
 ```bash
-> name
-[info] study-sbt
+> test
+[success] Total time: 0 s, completed Oct 31, 2017 7:09:01 AM
 ```
 
-The setting exists. How come? You can define settings specific for a Configuration like 'Test' or 'Compile', but you can also define settings that apply for all configurations. The setting 'name' is one of those settings that is the same for all configurations. In this case that is reasonable, it wouldn't make much sense to set the 'name' of the project to be different for Configurations. 
+The task 'test' works without specifying the 'test' configuration like above we typed 'test:test', how come? You can define settings and tasks specific for a Configuration like 'Test' or 'Compile', but you can also define settings and tasks that apply for all configurations. The task 'test' is made available in all scopes. In this case that is reasonable, because it is very handy to just type 'test' and have the test task executed.
 
 In Sbt you can use the symbol '*' and that means 'all' so if we want to get the value of the key 'name' in all configurations that we can also type:
 
@@ -209,6 +208,16 @@ set name in Test := "study-sbt-in-test"
 [info] Set current project to study-sbt (in build file:/Users/dennis/projects/study-sbt/)
 ```
 
+And lets change the name in the Configuration 'Compile':
+
+```scala
+set name in Compile := "study-sbt-in-compile"
+[info] Defining test:name
+[info] The new value will be used by test:packageBin::packageOptions, test:packageSrc::packageOptions
+[info] Reapplying settings...
+[info] Set current project to study-sbt (in build file:/Users/dennis/projects/study-sbt/)
+```
+
 We will now query the value for name for different scopes:
 
 ```bash
@@ -219,14 +228,13 @@ We will now query the value for name for different scopes:
 > test:name
 [info] study-sbt-in-test
 > compile:name
-[error] No such setting/task
-[error] compile:name
-[error]             ^
->
+[info] study-sbt-in-compile
 ```
 
+Note: In Sbt older than v1.0 the key-in-configuration fallback value resolution was a bit buggy and the fallback value resolution didn't always work as expected.
+
 ### Configuration by Task
-A configuration can also be scoped to a specific Task for example add the following to build.sbt:
+A configuration can also be scoped to a specific *Task* for example add the following to build.sbt:
 
 ```scala
 lazy val mysetting = settingKey[String]("My setting")
@@ -264,6 +272,20 @@ Sbt will use the next fallback and so on:
 ```bash
 > MyTask
 mysetting for the current project, for the Test configuration and all tasks
+[success] Total time: 0 s, completed 17-feb-2017 13:18:38
+```
+
+And now also comment out the line:
+
+```scala
+mysetting in Test := "mysetting for the current project, for the Test configuration and all tasks"
+```
+
+Sbt will use the next fallback and so on:
+
+```bash
+> MyTask
+mysetting for the current project, all configurations and all tasks
 [success] Total time: 0 s, completed 17-feb-2017 13:18:38
 ```
 
@@ -513,7 +535,9 @@ How do we do that? Lets find out.
 ### Dependency Key Operator
 As you may or may not know, Sbt is being simplified which means that a lot of 'exotic operators' are being dropped and only a few operators are being used and in context of a certain use case can be applied. Some of those operators you already know like ':=', '+=', '++=' and so on. 
 
-Because of a [technical reason #1444](https://github.com/sbt/sbt/issues/1444) we still need to use the '<<=' operator which is the 'Dependency Key' operator for some dependencies. No problem if you know what it is and what it does.
+Notice:
+- For SBT < v1.0 users: Because of a [technical reason #1444](https://github.com/sbt/sbt/issues/1444) we still need to use the '<<=' operator which is the 'Dependency Key' operator for some dependencies. No problem if you know what it is and what it does.
+- For SBT >= 1.0 users: Note: please replace '<<=' with ':=' as the dependency operator.
 
 Sbt allows us to define the following dependencies between tasks:
 
@@ -574,7 +598,7 @@ task2 := println("Task 2")
 task3 := println("Task 3")
 
 // when I type 'task1': task1 -> task3, because task3 is triggeredBy task1
-task3 <<= task3 triggeredBy task1
+task3 := (task3 triggeredBy task1).value
 ```
 
 Lets try it out:
@@ -611,7 +635,7 @@ task2 := println("Task 2")
 
 task3 := println("Task 3")
 
-task1 <<= task1 runBefore task3
+task1 := (task1 runBefore task3).value
 ```
 
 Lets try it out:
@@ -630,12 +654,12 @@ Task 3
 ```
 
 ### Scopes
-Key -> Value pairs play an important role in Sbt as they let us define settings and settings let us configure our build. Keys can easily be configured so that they have a value in a specific Configuration, Task or (Configuration,Task) combination. It is up to the implementation of the Task that needs a the configured value whether or not it looks for the value, so we have to look at the source code of the task for that.
+Key -> Value pairs play an important role in Sbt as they let us define settings and settings let us configure our projects and a build is made up out of one or more projects. Keys can easily be configured so that they have a value in a specific Configuration, Task or (Configuration,Task) combination. 
 
-Sbt gives us shorthands so easily scope Keys. There are two Scopes `Global` and `ThisBuild`. 
+Sbt gives us shorthands so easily scope Keys. There are two Scopes ['Global'](http://www.scala-sbt.org/1.x/docs/Scopes.html#Global+scope+component) and ['ThisBuild'](http://www.scala-sbt.org/1.x/docs/Scopes.html#Build-level+settings). 
 
 ### ThisBuild Scope
-Lets first task about 'ThisBuild'. When a Build consists of multiple projects, then the Scope 'ThisBuild' is handy. For a single project 'build.sbt' if you will, the Scope 'ThisBuild' doesn't make much sense, as the configuration will apply for the single (default) project.
+Lets first task about ['ThisBuild'](http://www.scala-sbt.org/1.x/docs/Scopes.html#Build-level+settings). When a Build consists of *multiple projects*, then the Scope 'ThisBuild' is handy. For a single project 'build.sbt', the Scope 'ThisBuild' doesn't make much sense, as the configuration will apply for the single (default) project.
 
 Say we have a multi-project `build.sbt` like so:
 
@@ -652,20 +676,24 @@ project1/name
 [info] project1
 
 > project1/scalaVersion
-[info] 2.10.6
+[info] 2.12.4
 ```
 
-Until now we haven't seen this syntax. The project name is also part of a Key. So the fully qualified name of a key is really (project/config:task::setting)
+Until now we haven't seen this syntax. The project name is also part of a Key. So the fully qualified name of a key is really:
+
+```bash
+(project/config:task::setting)
+```
 
 Of course we can leave parts of like so:
 
 ```bash
 > project1/scalaVersion
-[info] 2.10.6
+[info] 2.12.4
 > project1/test:scalaVersion
-[info] 2.10.6
+[info] 2.12.4
 > project1/test:test::scalaVersion
-[info] 2.10.6
+[info] 2.12.4
 ```
 
 Now lets say that we want to configure the scalaVersion only for 'project1' then we would type:
@@ -677,7 +705,7 @@ set scalaVersion in project1 := "2.11.8"
 [info] 2.11.8
 
 > project2/scalaVersion
-[info] 2.10.6
+[info] 2.12.4
 ```
 
 We could also set the scalaVersion for project1 in the `build.sbt` like so:
@@ -695,7 +723,7 @@ Then query:
 [info] 2.12.1
 ```
 
-Now say that we want to set the scalaVersion for all projects in our Build, then we would configure:
+Now say that we want to set the scalaVersion for all projects in our *Build*, then we would configure:
 
 ```bash
 > set scalaVersion in ThisBuild := "2.11.8"
@@ -708,17 +736,17 @@ Now say that we want to set the scalaVersion for all projects in our Build, then
 [info] 2.11.8
 ```
 
-Because we haven't removed the specific configuration that we have set on 'project1', that scalaVersion is still '2.12.1' but the setting for 'project2' has changed. The scope 'ThisBuild' is shorthand for the following:
+Because we haven't removed the specific configuration that we have set on 'project1', that scalaVersion is still '2.12.1' but the setting for 'project2' has changed. The scope ['ThisBuild'](http://www.scala-sbt.org/1.x/docs/Scopes.html#Build-level+settings) is shorthand for the following definition:
 
 ```
 All projects and all configuration and all tasks in the current build only.
 ```
 
 ### Global Scope
-The scope Global is handy to define settings that apply to all projects everywhere on your computer or your enterprise, and all of there configurations and all of there tasks. I guess that covers 'Global'. This scope only makes sense if you create plugins and you want to add the setting to all projects everywhere. If you can remember that Keys are scoped on Axis, so (Project/Configuration:Task) then the difference between the scope 'ThisBuild' and 'Global' is that for 'ThisBuild' the axis looks like ({.}/*:*) and for Global the axis looks like (*/*:*).
+The scope ['Global'](http://www.scala-sbt.org/1.x/docs/Scopes.html#Global+scope+component) is handy to define settings that apply to all projects everywhere on your computer or your enterprise, and all of there configurations and all of there tasks. I guess that covers 'Global'. This scope only makes sense if you create plugins and you want to add the setting to all projects everywhere. If you can remember that Keys are scoped on [Axis](http://www.scala-sbt.org/1.x/docs/Scopes.html#Scope+axes), so (Project/Configuration:Task) then the difference between the scope 'ThisBuild' and 'Global' is that for 'ThisBuild' the axis looks like ({.}/*:*) and for Global the axis looks like (*/*:*).
 
 ## Parsing user input
-SBT supports [parsing user input](http://www.scala-sbt.org/0.13/docs/Parsing-Input.html) as part of a task. To parse use input we use the `inputKey` eg:
+SBT supports [parsing user input](http://www.scala-sbt.org/1.x/docs/Parsing-Input.html) as part of a task. To parse use input we use the `inputKey` eg:
 
 ```scala
 import sbt.complete.DefaultParsers._
@@ -782,13 +810,10 @@ sbt ";clean;compile;run"                     # Runs the specified commands.
 ```
 
 ### SourceGenerators
-The [sourceGenerators](https://github.com/sbt/sbt/blob/0.13/main/src/main/scala/sbt/Keys.scala#L115) setting defines a list of
-tasks that generate sources. A source generation task should generate sources in a subdirectory of `sourceManaged`
-and return a sequence of files generated.
+The [sourceGenerators](https://github.com/sbt/sbt/blob/1.0.x/main/src/main/scala/sbt/Keys.scala#L180) setting defines a list of
+tasks that generate sources. A source generation task should generate sources in a subdirectory of `sourceManaged` and return a sequence of files generated.
 
- The key to add the task to is called `sourceGenerators`. Because we want to add the task, and not the value after its execution,
-we use `taskValue` instead of the usual `value`. It should be scoped according to whether the generated files are main (Compile)
-or test (Test) sources.
+The key to add the task to is called `sourceGenerators`. Because we want to add the task, and not the value after its execution we use `taskValue` instead of the usual `value`. It should be scoped according to whether the generated files are main (Compile) or test (Test) sources.
 
 For example, lets say we want to generate an `BuildInfo.scala` file that contains information about our build. We can do the following:
 
@@ -932,20 +957,8 @@ object Main extends App {
 
 Run the application with 'sbt run'.
 
-## Plugins
-tbd
-
-
 ## intellij sbt plugin
 - [Scala plugin for IntelliJ IDEA 2017.1](https://blog.jetbrains.com/scala/2017/03/23/scala-plugin-for-intellij-idea-2017-1-cleaner-ui-sbt-shell-repl-worksheet-akka-support-and-more/)
 - [Scala plugin Bugs](https://intellij-support.jetbrains.com/hc/en-us/community/topics/200381545-Scala)
-
-
-### The SBT-shell
-see: https://youtrack.jetbrains.com/issue/SCL-10984
-The [sbt-shell](https://intellij-support.jetbrains.com/hc/en-us/community/posts/115000117230-Sbt-shell-for-build-an-import) attempts
-to use the sbt shell as a server for running builds and project imports. It's marked as experimental since the communication
-doesn't happen over a proper server protocol (this will only be supported for sbt 1.0) but instead by literally pasting
-commands into the integrated shell and parsing the output.
 
 Have fun!
