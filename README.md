@@ -763,28 +763,39 @@ Compiled classes are available in `classDirectory in Compile` setting. The follo
 as a `Seq[Class[_]]`:
 
 ```scala
-val allClassesInClassDirectory = taskKey[Seq[String]]("Returns all classes in the classDirectory")
-
+val allClassesInClassDirectory = taskKey[Seq[(String, String)]]("Returns all classes in the classDirectory")
 allClassesInClassDirectory := {
-  val classDir: File = (classDirectory in Compile).value
-  val allClassFilesInClassDir: Seq[String] = (classDir ** "*.class").getPaths
-  allClassFilesInClassDir.map(_.diff(classDir.absolutePath)).map(_.replace("/", ".").drop(1).dropRight(6))
+  import scala.tools.nsc.classpath._
+  val baseDir: File = (classDirectory in Compile).value
+  val allClassFilesInClassDir: Seq[File] = (baseDir ** "*.class").get
+  val relativizer = IO.relativize(baseDir, _: File)
+  allClassFilesInClassDir
+    .flatMap(relativizer(_).toSeq)
+    .map(FileUtils.stripClassExtension)
+    .map(_.replace("/", "."))
+    .map(PackageNameUtils.separatePkgAndClassNames)
 }
 
-val allObjectsInClassDirectory = taskKey[Seq[String]]("Returns all objects in the classDirectory")
+val allObjectsInClassDirectory = taskKey[Seq[(String, String)]]("Returns all objects in the classDirectory")
 allObjectsInClassDirectory := {
-  allClassesInClassDirectory.value.filterNot(_.endsWith("$"))
+  allClassesInClassDirectory.value.filterNot {
+    case (_, className) => className.endsWith("$")
+  }
 }
 
-val onlyClassesInClassDirectory = taskKey[Seq[String]]("Returns only classes in the classDirectory")
+val onlyClassesInClassDirectory = taskKey[Seq[(String, String)]]("Returns only classes in the classDirectory")
 onlyClassesInClassDirectory := {
-  allClassesInClassDirectory.value.filterNot(_.contains("$"))
+  allClassesInClassDirectory.value.filterNot {
+    case (_, className) => className.contains("$")
+  }
 }
 
 val onlyClassesInClassDirectoryAsClass = taskKey[Seq[Class[_]]]("Returns only classes in the classDirectory as Class[_]")
 onlyClassesInClassDirectoryAsClass := {
   val cl = sbt.internal.inc.classpath.ClasspathUtilities.makeLoader(Seq((classDirectory in Compile).value), scalaInstance.value)
-  onlyClassesInClassDirectory.value.map(name => cl.loadClass(name))
+  onlyClassesInClassDirectory.value.map {
+    case (packageName, className) => cl.loadClass(s"$packageName.$className")
+  }
 }
 ```
 
