@@ -653,6 +653,111 @@ Task 3
 [success] Total time: 0 s, completed 18-feb-2017 13:45:47
 ```
 
+### Parallel and sequential task execution
+Sbt tries to execute tasks parallel by default. Most tasks can be evaluated in parallel like for example the following example:
+
+```scala
+val task1 = taskKey[String]("t1")
+val task2 = taskKey[String]("t2")
+val task3 = taskKey[String]("t3")
+val runAll = taskKey[String]("all parallel (the default behavior)")
+
+task1 := {
+  Thread.sleep(1000)
+  println("t1")
+  "task1"
+}
+
+task2 := {
+  Thread.sleep(750)
+  println("t2")
+  "task2"
+}
+
+task3 := {
+  Thread.sleep(850)
+  println("t3")
+  "task3"
+}
+
+runAll := {
+  val t1 = task1.value
+  val t2 = task2.value
+  val t3 = task3.value
+  val all = s"$t1 - $t2 - $t3"
+  println(all)
+  all
+}
+```
+
+When the `runAll` task is evaluated, Sbt evaluates the tasks in parallel and the value will be stored in the variables. When all tasks have been evaluated,
+the String van be evaluated and stored in `all` and lastly it can be printed to the console.
+
+The default `parallel` behavior is a feature of Sbt and cannot easily be disabled. Of cource, any task dependencies on other tasks are maintained when
+executing the tasks.
+
+### Sequentially executing tasks
+When it is necessary to evaluate tasks sequentially, for example, when orchestrating a deployment or forcing tasks to be executed sequentially,
+Sbt v0.13 and later have support for this using the `Def.sequential` task:
+
+```scala
+val runAllSequential = taskKey[String]("all sequential (forced by use of Def.sequential().value")
+
+runAllSequential := Def.sequential(task1, task2, task3).value
+```
+
+When the `runAllSequential` task is evaluated, the tasks will be executed sequentially. This operation is created using Scala `macros`, which means
+you can only use Def.sequential as the way we do above. You cannot use it inside another `Def.task` or `Def.taskDyn` etc.
+
+### Returning a task based on a setting
+A task can return a different task based on a value of a setting:
+
+```scala
+val choice = settingKey[String]("The task to execute")
+choice := "t1"
+
+val staticChoice = taskKey[Unit]("")
+staticChoice := Def.taskDyn {
+  choice.value match {
+    case "t1" => task1.toTask
+    case "t2" => task2.toTask
+    case "t3" => task3.toTask
+    case "all" => runAll.toTask
+    case _ => runAllSequential.toTask
+  }
+}.value
+```
+
+Based on the value of `choice`, the `Def.taskDyn` function returns a Task to be evaluated. Please note that the `Def.sequential` task is
+referenced by using its key-name which is `runAllSequential` in this example. You cannot use the `Def.sequential`inline.
+
+Please not the `.value` call at the end of `Def.taskDyn`, it is easy to forget.
+
+### Returning a task based on user input
+A task can return a different task based on user input:
+
+```scala
+val inputChoice = inputKey[Unit]("")
+inputChoice := Def.inputTaskDyn {
+  Def.spaceDelimited("choice").parsed.head match {
+    case "t1" => task1.toTask
+    case "t2" => task2.toTask
+    case "t3" => task3.toTask
+    case "all" => runAll.toTask
+    case "seq" => runAllSequential.toTask
+    case unknown => Def.task {
+      streams.value.log.info(s"(inputChoice): Unknown task: '$unknown'")
+      unknown
+    }
+  }
+}.evaluated
+```
+
+Based on user input, the `Def.inputTaskDyn` function returns a Task to be evaluated. Please note that the `Def.sequential` task is
+referenced by using its key-name which is `runAllSequential` in this example. You cannot use the `Def.sequential`inline.
+
+Please not the `.evaluated` call at the end of `Def.inputTaskDyn`, it is easy to forget.
+
 ### Scopes
 Key -> Value pairs play an important role in Sbt as they let us define settings and settings let us configure our projects and a build is made up out of one or more projects. Keys can easily be configured so that they have a value in a specific Configuration, Task or (Configuration,Task) combination. 
 
