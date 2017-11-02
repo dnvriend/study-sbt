@@ -758,6 +758,36 @@ referenced by using its key-name which is `runAllSequential` in this example. Yo
 
 Please not the `.evaluated` call at the end of `Def.inputTaskDyn`, it is easy to forget.
 
+### Returning Classes from the classDirectory
+Compiled classes are available in `classDirectory in Compile` setting. The following code can help getting a list of compiled classes as String and also
+as a `Seq[Class[_]]`:
+
+```scala
+val allClassesInClassDirectory = taskKey[Seq[String]]("Returns all classes in the classDirectory")
+
+allClassesInClassDirectory := {
+  val classDir: File = (classDirectory in Compile).value
+  val allClassFilesInClassDir: Seq[String] = (classDir ** "*.class").getPaths
+  allClassFilesInClassDir.map(_.diff(classDir.absolutePath)).map(_.replace("/", ".").drop(1).dropRight(6))
+}
+
+val allObjectsInClassDirectory = taskKey[Seq[String]]("Returns all objects in the classDirectory")
+allObjectsInClassDirectory := {
+  allClassesInClassDirectory.value.filterNot(_.endsWith("$"))
+}
+
+val onlyClassesInClassDirectory = taskKey[Seq[String]]("Returns only classes in the classDirectory")
+onlyClassesInClassDirectory := {
+  allClassesInClassDirectory.value.filterNot(_.contains("$"))
+}
+
+val onlyClassesInClassDirectoryAsClass = taskKey[Seq[Class[_]]]("Returns only classes in the classDirectory as Class[_]")
+onlyClassesInClassDirectoryAsClass := {
+  val cl = sbt.internal.inc.classpath.ClasspathUtilities.makeLoader(Seq((classDirectory in Compile).value), scalaInstance.value)
+  onlyClassesInClassDirectory.value.map(name => cl.loadClass(name))
+}
+```
+
 ### Scopes
 Key -> Value pairs play an important role in Sbt as they let us define settings and settings let us configure our projects and a build is made up out of one or more projects. Keys can easily be configured so that they have a value in a specific Configuration, Task or (Configuration,Task) combination. 
 
