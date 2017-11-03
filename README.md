@@ -792,7 +792,8 @@ onlyClassesInClassDirectory := {
 
 val allClassesInClassDirectoryAsClass = taskKey[Seq[Class[_]]]("Returns all classes in the classDirectory as Class[_]")
 allClassesInClassDirectoryAsClass := {
-  val cl = sbt.internal.inc.classpath.ClasspathUtilities.makeLoader(Seq((classDirectory in Compile).value), scalaInstance.value)
+  val cp: Seq[File] = (fullClasspath in Compile).value.map(_.data)
+  val cl = sbt.internal.inc.classpath.ClasspathUtilities.makeLoader(Seq((classDirectory in Compile).value) ++ cp, scalaInstance.value)
   allClassesInClassDirectory.value.map {
     case (packageName, className) => cl.loadClass(s"$packageName.$className")
   }
