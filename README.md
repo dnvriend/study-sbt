@@ -653,6 +653,221 @@ Task 3
 [success] Total time: 0 s, completed 18-feb-2017 13:45:47
 ```
 
+### Task graphs
+The Sbt documentation has very good documentation on the [task graph](http://www.scala-sbt.org/1.x/docs/Task-Graph.html), but here is the short explanation.
+
+The `.value` method is used to express a dependency on another task or setting. The `.value` method is special and may only be called in the argument to `:=`, `+=`, or `++=`.
+
+The `.value` method is not a normal Scala method and it is important to understand this. Sbt looks for these `.value` methods and lifts these operations outside the task body and will all be evaluated first. For developers, working with the `.value` methods within methods can lead to unexpected behavior because, independent on where the `.value` call is placed in a method, or even within an if-then-when expression, all `.value` methods will be lifted outside the body and evaluated first.
+
+Moreover, the evaluation order of all these `.value` methods are non-determinstic. So what is the best way to work with the `.value` method to write tasks? There are some options:
+
+1. Inlining `.value`
+2. Not inlining `.value`
+
+### Inlining '.value'
+Lets look at the first strategy 'Inlining .value'. We can inline the `.value` method by putting all calls to `.value` at the top of the task like in the following examples. The effect is that the developer cannot make a mistake by using the `.value` calls inside an if-then-else call. Also you have all calls to `.value` grouped together at the top of the task, which makes the separation clear. Lets build up to this style of tasks:
+
+```scala
+val task1 = taskKey[Unit]("")
+
+task1 := {
+  // put all .value calls here at the top
+
+
+  // put your task logic down below here
+  println("Hello")
+}
+```
+
+The previous code creates a task `task1` that has no dependencies, lets take a look:
+
+```bash
+sbt:study-sbt> inspect task1
+[info] Task: Unit
+[info] Description:
+[info]
+[info] Provided by:
+[info] 	{file:/Users/dennis/projects/study-sbt/}study-sbt/*:task1
+[info] Defined at:
+[info] 	/Users/dennis/projects/study-sbt/build.sbt:7
+[info] Delegates:
+[info] 	*:task1
+[info] 	{.}/*:task1
+[info] 	*/*:task1
+```
+
+Lets make task1 dependent on clean:
+
+```scala
+val task1 = taskKey[Unit]("")
+
+task1 := {
+  // put all .value calls here at the top
+  clean.value
+
+  // put your task logic down below here
+  println("Hello")
+}
+```
+
+We now see a dependency on the clean task:
+
+```bash
+sbt:study-sbt> inspect task1
+[info] Task: Unit
+[info] Description:
+[info]
+[info] Provided by:
+[info] 	{file:/Users/dennis/projects/study-sbt/}study-sbt/*:task1
+[info] Defined at:
+[info] 	/Users/dennis/projects/study-sbt/build.sbt:7
+[info] Dependencies:
+[info] 	*:clean
+[info] Delegates:
+[info] 	*:task1
+[info] 	{.}/*:task1
+[info] 	*/*:task1
+```
+
+Lets add another dependency, to `update` for example:
+
+```scala
+val task1 = taskKey[Unit]("")
+
+task1 := {
+  // put all .value calls here at the top
+  clean.value
+  val updateReport: UpdateReport = update.value
+
+  // put your task logic down below here
+  println(updateReport.allConfigurations)
+}
+```
+
+We now see a second dependency also on the update task:
+
+```bash
+sbt:study-sbt> inspect task1
+[info] Task: Unit
+[info] Description:
+[info]
+[info] Provided by:
+[info] 	{file:/Users/dennis/projects/study-sbt/}study-sbt/*:task1
+[info] Defined at:
+[info] 	/Users/dennis/projects/study-sbt/build.sbt:7
+[info] Dependencies:
+[info] 	*:update
+[info] 	*:clean
+[info] Delegates:
+[info] 	*:task1
+[info] 	{.}/*:task1
+[info] 	*/*:task1
+```
+
+By splitting the code into 'all calls to .value' and 'task logic', the developer doesn't have to worry about the evaluation order of all values and mixing the Sbt macro logic and the task logic.
+
+### Not-inlining '.value'
+Lets look at the second strategy, not-inlining `.value` methods. Here we will create a very distinct separation between the task logic and the task itself. We'll put all the logic inside a module that will be called by the task. The dependencies on the values will be part of the build script as a short implementation that will only make `.value` calls. Lets take a look at this strategy:
+
+```scala
+val task1 = taskKey[Unit]("")
+task1 := task1Impl(update.value, streams.value.log, name.value, scalaVersion.value)
+
+def task1Impl(updateReport: UpdateReport, log: Logger, projectName: String, scalaVersion: String): Unit = {
+  log.info(
+    s"""
+      |ProjectName: $projectName
+      |ScalaVersion: $scalaVersion
+      |Report: ${updateReport.stats}
+    """.stripMargin)
+}
+```
+
+We've split the task into method that contains all 'materialized' values from the Sbt environment. The developer now doesn't have to worry about the macro details of Sbt. The sequence evaluation works as expected inside the `task1Impl` method. The task implementation, which is the line 'task1 := task1Impl(update.value, streams.value.log, name.value, scalaVersion.value)', is responsible for creating the dependency on all other tasks an settings an evaluating all values. When all values are evaluated, the `task1Impl` method will be called.
+
+Lets look at the dependencies:
+
+```bash
+sbt:study-sbt> inspect task1
+[info] Task: Unit
+[info] Description:
+[info]
+[info] Provided by:
+[info] 	{file:/Users/dennis/projects/study-sbt/}study-sbt/*:task1
+[info] Defined at:
+[info] 	/Users/dennis/projects/study-sbt/build.sbt:7
+[info] Dependencies:
+[info] 	*:scalaVersion
+[info] 	*:name
+[info] 	*:task1::streams
+[info] 	*:update
+[info] Delegates:
+[info] 	*:task1
+[info] 	{.}/*:task1
+[info] 	*/*:task1
+```
+
+As expected, we have dependencies with all tasks and settings we have called `.value` on.
+
+A second strategy is to use an Scala object that will be used to be a container for the method. The only downside of this strategy is that the object must be put inside the `project` directory of your project. Just put it beside your `build.properties` file. Lets create the file `project/Task1Module.scala` with the following contents:
+
+```scala
+import sbt.{Logger, UpdateReport}
+
+object Task1Module {
+  def task1Impl(updateReport: UpdateReport, log: Logger, projectName: String, scalaVersion: String): String = {
+    s"""
+       |ProjectName: $projectName
+       |ScalaVersion: $scalaVersion
+       |Report: ${updateReport.stats}
+    """.stripMargin
+  }
+}
+```
+
+This implementation returns a String, in the previous example the method returned nothing. Lets look at the contents of `build.sbt`:
+
+```scala
+val task1 = taskKey[String]("")
+task1 := Task1Module.task1Impl(update.value, streams.value.log, name.value, scalaVersion.value)
+```
+
+Please note that I've changed `task1` a little, it now expects a String to be returned that we can show on the Sbt console with the command `show task1`:
+
+```bash
+sbt:study-sbt> show task1
+[info]
+[info] ProjectName: study-sbt
+[info] ScalaVersion: 2.12.4
+[info] Report: Resolve time: 64 ms, Download time: 4 ms, Download size: 0 bytes
+[info]
+```
+
+Lets inspect task1:
+
+```bash
+sbt:study-sbt> inspect task1
+[info] Task: java.lang.String
+[info] Description:
+[info]
+[info] Provided by:
+[info] 	{file:/Users/dennis/projects/study-sbt/}study-sbt/*:task1
+[info] Defined at:
+[info] 	/Users/dennis/projects/study-sbt/build.sbt:3
+[info] Dependencies:
+[info] 	*:scalaVersion
+[info] 	*:name
+[info] 	*:task1::streams
+[info] 	*:update
+[info] Delegates:
+[info] 	*:task1
+[info] 	{.}/*:task1
+[info] 	*/*:task1
+```
+
+As expected, the task still has dependencies to other settings and tasks like before.
+
 ### Parallel and sequential task execution
 Sbt tries to execute tasks parallel by default. Most tasks can be evaluated in parallel like for example the following example:
 
