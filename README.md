@@ -731,7 +731,7 @@ staticChoice := Def.taskDyn {
 Based on the value of `choice`, the `Def.taskDyn` function returns a Task to be evaluated. Please note that the `Def.sequential` task is
 referenced by using its key-name which is `runAllSequential` in this example. You cannot use the `Def.sequential`inline.
 
-Please not the `.value` call at the end of `Def.taskDyn`, it is easy to forget.
+Please note the `.value` call at the end of `Def.taskDyn`, it is easy to forget.
 
 ### Returning a task based on user input
 A task can return a different task based on user input:
@@ -756,7 +756,7 @@ inputChoice := Def.inputTaskDyn {
 Based on user input, the `Def.inputTaskDyn` function returns a Task to be evaluated. Please note that the `Def.sequential` task is
 referenced by using its key-name which is `runAllSequential` in this example. You cannot use the `Def.sequential`inline.
 
-Please not the `.evaluated` call at the end of `Def.inputTaskDyn`, it is easy to forget.
+Please note the `.evaluated` call at the end of `Def.inputTaskDyn`, it is easy to forget.
 
 ### Returning Classes from the classDirectory
 Compiled classes are available in `classDirectory in Compile` setting. The following code can help getting a list of compiled classes as String and also
@@ -797,6 +797,93 @@ onlyClassesInClassDirectoryAsClass := {
     case (packageName, className) => cl.loadClass(s"$packageName.$className")
   }
 }
+```
+
+### Unbound settings and tasks
+The keys of settings and tasks don't have to be bound ie. they dont have to have an implementation. Sbt has operators that can determine whether
+or not the keys are bound, and if not, give us a way to choose alternate keys or implementations to use:
+
+```scala
+lazy val s1 = settingKey[String]("s1")
+// there is no implementation of s1
+// so the key 's1' is "not bound"
+//s1 := "foo"
+
+lazy val s2 = settingKey[String]("s2")
+s2 := "bar"
+
+lazy val t1 = taskKey[Unit]("")
+t1 := {
+  // s1 is not bound, so maybeS1 is None
+  val maybeS1: Option[String] = s1.?.value
+  assert(maybeS1.isEmpty)
+
+  // s1 is not bound, if so, use 'quz' as string
+  val alternativeValue: String = s1.??("quz").value
+  assert(alternativeValue == "quz")
+
+  // if s1 is not bound, use the value of setting 's2'
+  val effectiveSetting: String = s1.or(s2).value
+  assert(effectiveSetting == "bar")
+}
+```
+
+### Changing the setting dynamically
+A setting can return a different value based on a result for example a value or a setting, or it could be calling another task and based on some
+observed effect (a file that exists or something else), change the setting's value:
+
+```scala
+lazy val s2 = settingKey[String]("s2")
+s2 := "bar"
+
+lazy val s3 = settingKey[String]("s2")
+s3 := Def.settingDyn {
+  s2.value match {
+    case "bar" => Def.setting("foo")
+    case _ => Def.setting("bar")
+  }
+}.value
+
+lazy val t1 = taskKey[Unit]("")
+t1 := {
+  println("effective: " + s3.value)
+}
+```
+
+Please note the `.value` call at the end of `Def.settingDyn`, it is easy to forget. Also note the we are using `Def.setting` here, until now we only
+have been using 'Def.task', but that doesn't work here.
+
+### Getting user input
+There are many ways for getting the users input, for example, using the Parser Combinator libary of sbt, but the following way is also very easy and has
+been taken from the [AWS Lambda Plugin](https://github.com/quaich-project/quartercask/blob/master/lambda/src/main/scala/codes/bytes/quartercask/lambda/AWSLambdaPlugin.scala)
+example:
+
+```scala
+lazy val t1 = taskKey[Unit]("")
+t1 := {
+  val name = readInput("What is your name?")
+  val age = readInput("What is your age?")
+  streams.value.log.info(s"Hello '$name', you are '$age' years old!")
+}
+
+def readInput(prompt: String): String = {
+  SimpleReader.readLine(s"$prompt\n") getOrElse {
+    val badInputMessage = "Unable to read input"
+    val updatedPrompt = if (prompt.startsWith(badInputMessage)) prompt else s"$badInputMessage\n$prompt"
+    readInput(updatedPrompt)
+  }
+}
+```
+
+console output:
+
+```bash
+sbt:study-sbt> t1
+What is your name?
+Dennis
+What is your age?
+42
+[info] Hello 'Dennis', you are '42' years old!
 ```
 
 ### Scopes
