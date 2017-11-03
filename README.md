@@ -1314,7 +1314,61 @@ We can now type commands in the client, but please note that input like 'show na
 
 The command `exit` closes the connection as expected.
 
-### Intellij and SBT console
+### Commands
+There are several definition of 'a command' when you are working with SBT. When working with Sbt, the things you type into the console are called 'commands'. These commands-you-type most often trigger a 'task' or a 'setting' like for example 'name' that will evaluate the setting 'name'. Besides a 'setting' or a 'task' there is a third thing that can be executed and that thing is called a 'command'.
+
+There is a technical distinction in sbt between tasks, which are 'inside' the build definition, and commands, which manipulate the build definition itself. Most often it is not necessary to create commands because most activities can be implemented by chaining multiple tasks.
+
+You would need a task if you need to manipulate the state of the build.
+
+
+Lets create an helloworld build:
+
+```scala
+lazy val hello = Command.command("hello") { state =>
+  println("Hello there!")
+  state
+}
+
+commands += hello
+```
+
+The previous creates a command and stores it into the value 'hello' and adds the command to the list of commands of Sbt.
+
+We can now execute the command by typing `hello`:
+
+```bash
+sbt:study-sbt> hello
+Hello there!
+```
+
+The point of working with Commands is to 'get to the state of the project', so we need to extract information from it:
+
+```scala
+lazy val hello = Command.command("hello") { state =>
+  val extracted = Project.extract(state)
+  import extracted._
+  println("Current build: " + currentRef.build)
+  println("Current project: " + currentRef.project)
+  println("Original setting count: " + session.original.size)
+  println("Session setting count: " + session.append.size)
+
+  state
+}
+
+commands += hello
+```
+
+We can now take a look at the extracted project state:
+
+```bash
+sbt:study-sbt> hello
+Current build: file:/Users/dennis/projects/study-sbt/
+Current project: study-sbt
+Original setting count: 667
+Session setting count: 0
+```
+
 
 
 ## intellij sbt plugin
