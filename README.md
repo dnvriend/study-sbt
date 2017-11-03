@@ -790,12 +790,82 @@ onlyClassesInClassDirectory := {
   }
 }
 
+val allClassesInClassDirectoryAsClass = taskKey[Seq[Class[_]]]("Returns all classes in the classDirectory as Class[_]")
+allClassesInClassDirectoryAsClass := {
+  val cl = sbt.internal.inc.classpath.ClasspathUtilities.makeLoader(Seq((classDirectory in Compile).value), scalaInstance.value)
+  allClassesInClassDirectory.value.map {
+    case (packageName, className) => cl.loadClass(s"$packageName.$className")
+  }
+}
+
 val onlyClassesInClassDirectoryAsClass = taskKey[Seq[Class[_]]]("Returns only classes in the classDirectory as Class[_]")
 onlyClassesInClassDirectoryAsClass := {
   val cl = sbt.internal.inc.classpath.ClasspathUtilities.makeLoader(Seq((classDirectory in Compile).value), scalaInstance.value)
   onlyClassesInClassDirectory.value.map {
     case (packageName, className) => cl.loadClass(s"$packageName.$className")
   }
+}
+```
+
+### Getting marked classes from the classpath
+[Java annotations](https://docs.oracle.com/javase/tutorial/java/annotations/) are a form of metadata that provides extra information about a program but is not part
+of the program itself. Annotations have no direct effect on the code they annotate.
+
+Annotations have a number of uses, among them:
+
+- Information for the compiler: Annotations can be used by the compiler to detect errors or suppress warnings,
+- Compile-time and deployment-time processing: Software tools can process annotation information to generate code, property files, and so forth,
+- Runtime processing: some annotations are available to be examined at runtime.
+
+Creating an annotation is quite simple, for example, lets create our own Java Annotation:
+
+```java
+package main;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+
+@Retention(RetentionPolicy.RUNTIME)
+public @interface MyMarker {
+    String name() default "N/A";
+    String author() default "Dennis Was Here";
+}
+```
+
+Annotatations can be handy, but my default the JVM does some memory-saving optimizations, which means that an annotation is not available at runtime by default. This means that we have
+to 'annotate' the annotation with an annotation that tells the compiler that the annotation must be retained for runtime use, which is what we want.
+
+The default retention policy is `RetentionPolicy.CLASS` which means that, by default, annotation information is not retained at runtime:
+
+> Annotations are to be recorded in the class file by the compiler but need not be retained by the VM at run time. This is the default behavior.
+
+Instead, use `RetentionPolicy.RUNTIME`:
+
+> Annotations are to be recorded in the class file by the compiler and retained by the VM at run time, so they may be read reflectively.
+
+To find which classes have been annotated with the `MyMarker` annotation, we can do the following:
+
+```scala
+val findMarked = taskKey[Seq[Class[_]]]("Returns the classes that have been annotated with the 'MyMarker' annotation")
+findMarked := {
+  allClassesInClassDirectoryAsClass.value
+      .filter(_.getDeclaredAnnotations.toList.exists(_.annotationType().getName.contains("MyMarker")))
+}
+```
+
+We can also parse the annotation like so:
+
+```scala
+val parseMarked = taskKey[Seq[(Class[_], String)]]("Returns the classes that have been annotated with the 'MyMarker' annotation with the JSON representation of the fields of the annotation")
+parseMarked := {
+  def getMarkedAnnotationValues(cl: Class[_]): Option[(Class[_], String)] = {
+    cl.getDeclaredAnnotations.toList.find(_.annotationType().getName.contains("MyMarker")).map { anno =>
+      val name = anno.annotationType().getMethod("name").invoke(anno)
+      val author = anno.annotationType().getMethod("author").invoke(anno)
+      s"""{"name":"$name","author":"$author"}"""
+    }.map(json => (cl, json))
+  }
+  findMarked.value.flatMap(getMarkedAnnotationValues)
 }
 ```
 
@@ -1189,6 +1259,63 @@ object Main extends App {
 ```
 
 Run the application with 'sbt run'.
+
+## Server, Client, Shell
+[Sbt server](http://www.scala-sbt.org/1.x-beta/docs/sbt-server.html) is a feature of sbt 1.x that adds network access to a single running instance of Sbt. This allows multiple clients
+to connect to a single session of Sbt. The primary use case is tooling integration such as editors and IDEs.
+
+There are three new commands:
+- *sbt shell*: provides an interactive prompt from which commands can be run
+- *sbt client 127.0.0.1:<port>*: provides an interactive prompt for which commands can be run on a server
+- *sbt startServer*: starts the sbt server if it has not been started.
+
+By default, sbt interactive mode is started when no commands are provided on the CLI. The interactive shell is also started when the `shell` command is invoked with the
+command `sbt shell`. The `sbt shell` command does not only launch an interactive shell, but it also launches the sbt server. When you just type `sbt -Dsbt.server.autostart=false`,
+the server is not started but the interactive shell.
+
+When you start an sbt session by typing `sbt`, the interactive shell and sbt server is started. The server will output the port its running on:
+
+```bash
+$ sbt
+[info] Loading settings from idea.sbt,sbt-updates.sbt ...
+[info] Loading global plugins from /Users/dennis/.sbt/1.0/plugins
+[info] Loading settings from plugins.sbt ...
+[info] Loading project definition from /Users/dennis/projects/study-sbt/project
+[info] Loading settings from build.sbt ...
+[info] Set current project to study-sbt (in build file:/Users/dennis/projects/study-sbt/)
+[info] sbt server started at 127.0.0.1:5829
+```
+
+The server is running on '127.0.0.1:5829'.
+
+When we start a new terminal session and from an arbitrary directory location on your system type: `sbt client 127.0.0.1:5829`, we get the following output on the server:
+
+```bash
+sbt:study-sbt> [info] new client connected from: 50745
+```
+
+and we get the following output on the client:
+
+```bash
+$ sbt client 127.0.0.1:5829
+[info] Loading settings from idea.sbt,sbt-updates.sbt ...
+[info] Loading global plugins from /Users/dennis/.sbt/1.0/plugins
+[info] Updating {file:/Users/dennis/.sbt/1.0/plugins/}global-plugins...
+[info] Done updating.
+[info] Loading project definition from /Users/dennis/projects/project
+[info] Updating {file:/Users/dennis/projects/project/}projects-build...
+[info] Done updating.
+[info] Set current project to projects (in build file:/Users/dennis/projects/)
+client on port 5829
+ChannelAcceptedEvent(channel-1)
+```
+
+We can now type commands in the client, but please note that input like 'show name' (the first thing I did) only shows up on the server as output.
+
+The command `exit` closes the connection as expected.
+
+### Intellij and SBT console
+
 
 ## intellij sbt plugin
 - [Scala plugin for IntelliJ IDEA 2017.1](https://blog.jetbrains.com/scala/2017/03/23/scala-plugin-for-intellij-idea-2017-1-cleaner-ui-sbt-shell-repl-worksheet-akka-support-and-more/)
