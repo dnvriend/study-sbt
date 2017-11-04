@@ -1530,6 +1530,123 @@ We can now type commands in the client, but please note that input like 'show na
 
 The command `exit` closes the connection as expected.
 
+### Forking processes
+Sbt can fork processes with the [Fork API](http://www.scala-sbt.org/1.x/docs/Forking.html). Lets fork the following  application which is in src/main/scala/main/Main.scala:
+
+```scala
+package main
+
+object Main extends App {
+  println("Hello World!: " + args.toList)
+}
+```
+
+Now lets look at our build:
+
+```scala
+val task1 = taskKey[Unit]("")
+task1 := {
+  def classpathOption(classpath: Seq[File]): Seq[String] = {
+    "-classpath" :: Path.makeString(classpath) :: Nil
+  }
+  val cp: Seq[File] = (fullClasspath in Compile).value.map(_.data)
+  val mainClass: String = "main.Main"
+  val arguments: Seq[String] = Seq("Hello World!")
+  val outputStrategy = StdoutOutput
+//  val outputStrategy = LoggedOutput(streams.value.log)
+  val config: ForkOptions = ForkOptions(
+    javaHome.value,
+    Some(outputStrategy), // StdOutput, LoggedOutput
+    Vector(),
+    Some(baseDirectory.value),
+    javaOptions.value.toVector,
+    connectInput.value,
+    envVars.value
+  )
+  val fullArguments: Seq[String] = classpathOption(cp) ++ Seq(mainClass) ++ arguments
+
+  // Process is being executed
+  val exitValue = Fork.java(config, fullArguments)
+}
+```
+
+Fork just calls the 'java' command just like you would on the CLI. As you know, you can put all kinds of arguments to make java work and a full command would be something like:
+
+```bash
+java -classpath <all jars here> main.Main <args here>
+```
+
+Sbt has abstracted such calls away for us and exposes it as the Fork API. We have to do some setup to make it work like:
+
+- Determine what the main class is (main.Main)
+- Determine what the arguments for the main class is (arguments)
+- Determine what the classpath is (the part after -classpath) and must be placed before 'main.Main <arguments>',
+- Determine how to log the output of our forked process (to StdOutput or the Sbt Logger)
+- Determine javaHome, boot classes (Vector()), the baseDir to use, the javaOptions and environment variables
+
+In short, we are setting up a fully configured JVM instance and everything must be just right to launch our 'main.Main' class.
+
+Finally, we can make the call to `Fork.java(config, fullArguments)` and it is a blocking call to that JVM. The result is an exitValue of type `Int`.
+
+The dependency of this task is the following and as expected we see all tasks and settings we call before we can Fork our process:
+
+```bash
+sbt:study-sbt> inspect task1
+[info] Task: Unit
+[info] Description:
+[info]
+[info] Provided by:
+[info] 	{file:/Users/dennis/projects/study-sbt/}study-sbt/*:task1
+[info] Defined at:
+[info] 	/Users/dennis/projects/study-sbt/build.sbt:2
+[info] Dependencies:
+[info] 	*:connectInput
+[info] 	*:envVars
+[info] 	*:javaHome
+[info] 	*:javaOptions
+[info] 	compile:fullClasspath
+[info] 	*:baseDirectory
+[info] Delegates:
+[info] 	*:task1
+[info] 	{.}/*:task1
+[info] 	*/*:task1
+```
+
+### Using a ScalaRun 'runner'
+The previous example when we forked a program can become much shorter when we use the `Keys.runner` which is implemented in `Defaults.runnerTask` and returns a `ScalaRun`, 'a fully configured runner implementation used to run a main class' like the `main.Main` class for example. The task will become much shorter:
+
+```scala
+ val runnerToUse: ScalaRun = runner.value
+  Run.run(
+  "main.Main",
+  (fullClasspath in Compile).value.map(_.data),
+  Seq("hello", "world"),
+  streams.value.log)(runnerToUse)
+```
+
+Note that we can put the runner in implicit scope if we wish because it is just a generic runner that can be injected anywhere we like. Here I'm passing it explicitly to `Run.run(...)(runnerToUse)` to point out the use case.
+
+If we look at the dependencies then we see the following:
+
+```bash
+sbt:study-sbt> inspect task1
+[info] Task: Unit
+[info] Description:
+[info]
+[info] Provided by:
+[info] 	{file:/Users/dennis/projects/study-sbt/}study-sbt/*:task1
+[info] Defined at:
+[info] 	/Users/dennis/projects/study-sbt/build.sbt:2
+[info] Dependencies:
+[info] 	*:task1::streams
+[info] 	compile:fullClasspath
+[info] 	*:runner
+[info] Delegates:
+[info] 	*:task1
+[info] 	{.}/*:task1
+[info] 	*/*:task1
+```
+
 ### Commands
 There are several definition of 'a command' when you are working with SBT. When working with Sbt, the things you type into the console are called 'commands'. These commands-you-type most often trigger a 'task' or a 'setting' like for example 'name' that will evaluate the setting 'name'. Besides a 'setting' or a 'task' there is a third thing that can be executed and that thing is called a 'command'.
 
