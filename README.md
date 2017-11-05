@@ -343,6 +343,63 @@ Give me the value for the key 'name' in the configuration 'Compile' for the task
 ### Inspecting Sbt Settings
 You've learned a lot about Sbt, what a build is, that tasks and settings are and also about scopes. What I want you to do now is take 15 minutes of your time to read the explanation on [Inspecting Settings](http://www.scala-sbt.org/1.x/docs/Inspecting-Settings.html) from the [Sbt documentation](http://www.scala-sbt.org/documentation.html). When you can inspect your settings and understand what the effective settings and tasks will be used you will have a better Sbt development experience in general.
 
+Lets take a closer look at inspecting a task. The following example shows three tasks where task3 is dependent on task2 and task1:
+
+```scala
+lazy val task1 = taskKey[Unit]("task 1")
+lazy val task2 = taskKey[Unit]("task 2")
+lazy val task3 = taskKey[Unit]("task 3")
+
+task1 := println("Task 1")
+task2 := println("Task 2")
+task3 := println("Task 3")
+
+task3 := (task3 dependsOn task2 dependsOn task1).value
+```
+
+If we inspect the build, we see the following dependencies:
+
+```bash
+sbt:study-sbt> inspect task3
+[info] Task: Unit
+[info] Description:
+[info] 	task 3
+[info] Provided by:
+[info] 	{file:/Users/dennis/projects/study-sbt/}study-sbt/*:task3
+[info] Dependencies:
+[info] 	*:task2
+[info] 	*:task1
+```
+
+We see that task3 is dependent on task2 and task2 and this is also the evaluation order. If we change the dependency that task3 is dependent on task1 that depends on task2 we see the following:
+
+```scala
+task3 := (task3 dependsOn task1 dependsOn task2).value
+```
+
+After a reload, lets inspect task3:
+
+```bash
+sbt:study-sbt> inspect task3
+[info] Task: Unit
+[info] Description:
+[info] 	task 3
+[info] Provided by:
+[info] 	{file:/Users/dennis/projects/study-sbt/}study-sbt/*:task3
+[info] Dependencies:
+[info] 	*:task1
+[info] 	*:task2
+```
+
+We have changed the sequence of the dependencies.
+
+Now lets take a quick look at a full inspect output. It contains the following:
+
+- __Provided by__: shows the actual scope (the full scope) where the setting is defined
+- __Dependencies__: list all the inputs to a task. The listing is the sequence of evaluation and if possible, sbt will try to evaluate the dependencies in parallel. The entries show the configuration, task and setting that is an input for the task. Please note that these entries are the defined inputs with scope. To see the 'actual' values, please use the `inspect actual <key>` command,
+- __Delegatess:__ A setting has a key and a scope. A request for a key in a scope 'A' may be delegated to another scope if 'A' doesn’t define a value for the key. The delegation chain is well-defined and is displayed in the Delegates section of the inspect command. The Delegates section shows the order in which scopes are searched when a value is not defined for the requested key,
+- __Related__: lists all of the definitions of a key so read these listings as 'there are also these keys in these scopes you can take a look at',
+
 ### Custom Configurations
 We can also create our own configurations. Lets start right away by defining a configuration called 'my-config' that 
 will be used by the task 'MyOtherTask':
