@@ -340,6 +340,9 @@ The last syntax is new and must be read as:
 Give me the value for the key 'name' in the configuration 'Compile' for the task 'compile'.
 ```
 
+### Inspecting Sbt Settings
+You've learned a lot about Sbt, what a build is, that tasks and settings are and also about scopes. What I want you to do now is take 15 minutes of your time to read the explanation on [Inspecting Settings](http://www.scala-sbt.org/1.x/docs/Inspecting-Settings.html) from the [Sbt documentation](http://www.scala-sbt.org/documentation.html). When you can inspect your settings and understand what the effective settings and tasks will be used you will have a better Sbt development experience in general.
+
 ### Custom Configurations
 We can also create our own configurations. Lets start right away by defining a configuration called 'my-config' that 
 will be used by the task 'MyOtherTask':
