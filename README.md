@@ -1787,6 +1787,7 @@ res0: reflect.runtime.universe.Type = scala.List[Int]
 
 We could also 'ask the compiler' to create a `TypeTag` for us and use the `tpe` method to get to the type:
 
+```bash
 scala> implicitly[TypeTag[List[Int]]]
 res1: reflect.runtime.universe.TypeTag[List[Int]] = TypeTag[scala.List[Int]]
 
