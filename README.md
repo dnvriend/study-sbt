@@ -672,7 +672,7 @@ Moreover, the evaluation order of all these `.value` methods are non-determinsti
 Lets look at the first strategy 'Inlining .value'. We can inline the `.value` method by putting all calls to `.value` at the top of the task like in the following examples. The effect is that the developer cannot make a mistake by using the `.value` calls inside an if-then-else call. Also you have all calls to `.value` grouped together at the top of the task, which makes the separation clear. Lets build up to this style of tasks:
 
 ```scala
-val task1 = taskKey[Unit]("")
+lazy val task1 = taskKey[Unit]("")
 
 task1 := {
   // put all .value calls here at the top
@@ -703,7 +703,7 @@ sbt:study-sbt> inspect task1
 Lets make task1 dependent on clean:
 
 ```scala
-val task1 = taskKey[Unit]("")
+lazy val task1 = taskKey[Unit]("")
 
 task1 := {
   // put all .value calls here at the top
@@ -736,7 +736,7 @@ sbt:study-sbt> inspect task1
 Lets add another dependency, to `update` for example:
 
 ```scala
-val task1 = taskKey[Unit]("")
+lazy val task1 = taskKey[Unit]("")
 
 task1 := {
   // put all .value calls here at the top
@@ -774,7 +774,7 @@ By splitting the code into 'all calls to .value' and 'task logic', the developer
 Lets look at the second strategy, not-inlining `.value` methods. Here we will create a very distinct separation between the task logic and the task itself. We'll put all the logic inside a module that will be called by the task. The dependencies on the values will be part of the build script as a short implementation that will only make `.value` calls. Lets take a look at this strategy:
 
 ```scala
-val task1 = taskKey[Unit]("")
+lazy val task1 = taskKey[Unit]("")
 task1 := task1Impl(update.value, streams.value.log, name.value, scalaVersion.value)
 
 def task1Impl(updateReport: UpdateReport, log: Logger, projectName: String, scalaVersion: String): Unit = {
@@ -875,10 +875,10 @@ As expected, the task still has dependencies to other settings and tasks like be
 Sbt tries to execute tasks parallel by default. Most tasks can be evaluated in parallel like for example the following example:
 
 ```scala
-val task1 = taskKey[String]("t1")
-val task2 = taskKey[String]("t2")
-val task3 = taskKey[String]("t3")
-val runAll = taskKey[String]("all parallel (the default behavior)")
+lazy val task1 = taskKey[String]("t1")
+lazy val task2 = taskKey[String]("t2")
+lazy val task3 = taskKey[String]("t3")
+lazy val runAll = taskKey[String]("all parallel (the default behavior)")
 
 task1 := {
   Thread.sleep(1000)
@@ -918,7 +918,7 @@ executing the tasks.
 When it is necessary to evaluate tasks sequentially, for example, when orchestrating a deployment or forcing tasks to be executed sequentially, Sbt v0.13 and later have support for this using the `Def.sequential` task:
 
 ```scala
-val runAllSequential = taskKey[String]("all sequential (forced by use of Def.sequential().value")
+lazy val runAllSequential = taskKey[String]("all sequential (forced by use of Def.sequential().value")
 
 runAllSequential := Def.sequential(task1, task2, task3).value
 ```
@@ -930,10 +930,10 @@ you can only use Def.sequential as the way we do above. You cannot use it inside
 A task can return a different task based on a value of a setting:
 
 ```scala
-val choice = settingKey[String]("The task to execute")
+lazy val choice = settingKey[String]("The task to execute")
 choice := "t1"
 
-val staticChoice = taskKey[Unit]("")
+lazy val staticChoice = taskKey[Unit]("")
 staticChoice := Def.taskDyn {
   choice.value match {
     case "t1" => task1.toTask
@@ -954,7 +954,7 @@ Please note the `.value` call at the end of `Def.taskDyn`, it is easy to forget.
 A task can return a different task based on user input:
 
 ```scala
-val inputChoice = inputKey[Unit]("")
+lazy val inputChoice = inputKey[Unit]("")
 inputChoice := Def.inputTaskDyn {
   Def.spaceDelimited("choice").parsed.head match {
     case "t1" => task1.toTask
@@ -980,7 +980,7 @@ Compiled classes are available in `classDirectory in Compile` setting. The follo
 as a `Seq[Class[_]]`:
 
 ```scala
-val allClassesInClassDirectory = taskKey[Seq[(String, String)]]("Returns all classes in the classDirectory")
+lazy val allClassesInClassDirectory = taskKey[Seq[(String, String)]]("Returns all classes in the classDirectory")
 allClassesInClassDirectory := {
   import scala.tools.nsc.classpath._
   val baseDir: File = (classDirectory in Compile).value
@@ -993,21 +993,21 @@ allClassesInClassDirectory := {
     .map(PackageNameUtils.separatePkgAndClassNames)
 }
 
-val allObjectsInClassDirectory = taskKey[Seq[(String, String)]]("Returns all objects in the classDirectory")
+lazy val allObjectsInClassDirectory = taskKey[Seq[(String, String)]]("Returns all objects in the classDirectory")
 allObjectsInClassDirectory := {
   allClassesInClassDirectory.value.filterNot {
     case (_, className) => className.endsWith("$")
   }
 }
 
-val onlyClassesInClassDirectory = taskKey[Seq[(String, String)]]("Returns only classes in the classDirectory")
+lazy val onlyClassesInClassDirectory = taskKey[Seq[(String, String)]]("Returns only classes in the classDirectory")
 onlyClassesInClassDirectory := {
   allClassesInClassDirectory.value.filterNot {
     case (_, className) => className.contains("$")
   }
 }
 
-val allClassesInClassDirectoryAsClass = taskKey[Seq[Class[_]]]("Returns all classes in the classDirectory as Class[_]")
+lazy val allClassesInClassDirectoryAsClass = taskKey[Seq[Class[_]]]("Returns all classes in the classDirectory as Class[_]")
 allClassesInClassDirectoryAsClass := {
   val cp: Seq[File] = (fullClasspath in Compile).value.map(_.data)
   val cl = sbt.internal.inc.classpath.ClasspathUtilities.makeLoader(Seq((classDirectory in Compile).value) ++ cp, scalaInstance.value)
@@ -1016,7 +1016,7 @@ allClassesInClassDirectoryAsClass := {
   }
 }
 
-val onlyClassesInClassDirectoryAsClass = taskKey[Seq[Class[_]]]("Returns only classes in the classDirectory as Class[_]")
+lazy val onlyClassesInClassDirectoryAsClass = taskKey[Seq[Class[_]]]("Returns only classes in the classDirectory as Class[_]")
 onlyClassesInClassDirectoryAsClass := {
   val cl = sbt.internal.inc.classpath.ClasspathUtilities.makeLoader(Seq((classDirectory in Compile).value), scalaInstance.value)
   onlyClassesInClassDirectory.value.map {
@@ -1025,17 +1025,27 @@ onlyClassesInClassDirectoryAsClass := {
 }
 ```
 
-### Getting marked classes from the classpath
-[Java annotations](https://docs.oracle.com/javase/tutorial/java/annotations/) are a form of metadata that provides extra information about a program but is not part
-of the program itself. Annotations have no direct effect on the code they annotate.
+### Getting annotated classes from the classpath
+There are [different kinds of annotations in Scala](https://stackoverflow.com/questions/35420334/how-to-define-and-use-custom-annotations-in-scala):
+
+- Plain annotations that are only in the code: These can be accessed from macros in the compilation unit where the macro is called where the macro gets access to the AST
+- StaticAnnotations that are shared over compilation units: these can be accessed via scala reflection api
+- ClassfileAnnotations: these represent annotations stored as java annotations. If you want to access them via the Java Reflection API you have to define them in Java though.
+
+A good read about the subject is: [What is the (current) state of scala reflection capabilities, especially wrt annotations, as of version 2.11?](https://stackoverflow.com/questions/35251426/what-is-the-current-state-of-scala-reflection-capabilities-especially-wrt-ann/35254466#35254466)
+
+[Java annotations](https://docs.oracle.com/javase/tutorial/java/annotations/) are a form of metadata that provides extra information about a program but is not part of the program itself. Annotations have no direct effect on the code they annotate.
 
 Annotations have a number of uses, among them:
 
-- Information for the compiler: Annotations can be used by the compiler to detect errors or suppress warnings,
+- Corrections of encoding:
+  - Information for the compiler: Annotations can be used by the compiler to detect errors or suppress warnings,
+  - Show deprecation warnings,
+  - validation of correction of encodings like the '@tailrec' annotation to check for tail-recursive methods,
 - Compile-time and deployment-time processing: Software tools can process annotation information to generate code, property files, and so forth,
 - Runtime processing: some annotations are available to be examined at runtime.
 
-Creating an annotation is quite simple, for example, lets create our own Java Annotation:
+As described in [A tour of Scala: Annotations](https://docs.scala-lang.org/tour/annotations.html), Annotations associate meta-information with definitions. Creating an annotation is quite simple, for example, lets create our own Java Annotation:
 
 ```java
 package main;
@@ -1061,20 +1071,22 @@ Instead, use `RetentionPolicy.RUNTIME`:
 
 > Annotations are to be recorded in the class file by the compiler and retained by the VM at run time, so they may be read reflectively.
 
-To find which classes have been annotated with the `MyMarker` annotation, we can do the following:
+We will use the `getClass[AnnotatedClass].getAnnotations` method that only returns Java Annotations. To find which classes have been annotated with the `MyMarker` annotation, we can do the following:
 
 ```scala
-val findMarked = taskKey[Seq[Class[_]]]("Returns the classes that have been annotated with the 'MyMarker' annotation")
+lazy val findMarked = taskKey[Seq[Class[_]]]("Returns the classes that have been annotated with the 'MyMarker' annotation")
 findMarked := {
   allClassesInClassDirectoryAsClass.value
       .filter(_.getDeclaredAnnotations.toList.exists(_.annotationType().getName.contains("MyMarker")))
 }
 ```
 
+As a side-note: `class.getDeclaredAnnotations` and `class.getAnnotations` is that with `getDeclaredAnnotations` it ignores inherited annotations, so it would only return annotations that are declared on the class itself, the `getAnnotations` method would return all annotations also inherited ones.
+
 We can also parse the annotation like so:
 
 ```scala
-val parseMarked = taskKey[Seq[(Class[_], String)]]("Returns the classes that have been annotated with the 'MyMarker' annotation with the JSON representation of the fields of the annotation")
+lazy val parseMarked = taskKey[Seq[(Class[_], String)]]("Returns the classes that have been annotated with the 'MyMarker' annotation with the JSON representation of the fields of the annotation")
 parseMarked := {
   def getMarkedAnnotationValues(cl: Class[_]): Option[(Class[_], String)] = {
     cl.getDeclaredAnnotations.toList.find(_.annotationType().getName.contains("MyMarker")).map { anno =>
@@ -1345,19 +1357,19 @@ For example, lets say we want to generate an `BuildInfo.scala` file that contain
 - run the console application
 
 ```scala
-val getCommitSha = taskKey[String]("Returns the current git commit SHA")
+lazy val getCommitSha = taskKey[String]("Returns the current git commit SHA")
 
 getCommitSha := {
   Process("git rev-parse HEAD").lines.head
 }
 
-val getCurrentDate = taskKey[String]("Get current date")
+lazy val getCurrentDate = taskKey[String]("Get current date")
 
 getCurrentDate := {
   new java.text.SimpleDateFormat("yyyy-HH-mm'T'hh:MM:ss.SSSSXX").format(new java.util.Date())
 }
 
-val getBuildInfo = taskKey[String]("Get information about the build")
+lazy val getBuildInfo = taskKey[String]("Get information about the build")
 
 getBuildInfo := {
   s"""Map(
@@ -1372,7 +1384,7 @@ getBuildInfo := {
    """.stripMargin
 }
 
-val makeBuildInfo = taskKey[Seq[File]]("Makes the BuildInfo.scala file")
+lazy val makeBuildInfo = taskKey[Seq[File]]("Makes the BuildInfo.scala file")
 
 makeBuildInfo := {
   val resourceDir: File = (sourceManaged in Compile).value
@@ -1429,14 +1441,14 @@ Lets first create the two tasks, you can put the following in 'build.sbt':
 libraryDependencies += "com.typesafe" % "config" % "1.3.1"
 
 // 'gitCommitSha' will query 'git' for the SHA of HEAD
-val gitCommitSha = taskKey[String]("Returns the current git commit SHA")
+lazy val gitCommitSha = taskKey[String]("Returns the current git commit SHA")
 
 gitCommitSha := {
   Process("git rev-parse HEAD").lines.head
 }
 
 // 'makeVersionConfig' will create the 'version.config' file
-val makeVersionConfig = taskKey[Seq[File]]("Makes a version config file")
+lazy val makeVersionConfig = taskKey[Seq[File]]("Makes a version config file")
 
 makeVersionConfig := {
   println("Creating makeVersionConfig")
@@ -1759,6 +1771,152 @@ lazy val noopCallback = new xsbti.AnalysisCallback {
   override def generatedLocalClass(source: File, classFile: File): Unit = {}
   override def api(sourceFile: File, classApi: xsbti.api.ClassLike): Unit = {}
   override def usedName(className: String, name: String, useScopes: java.util.EnumSet[xsbti.UseScope]): Unit = {}
+}
+```
+
+### Getting Types from the Scala Type System by String
+It is possible, but not encouraged, to get types from the scala Type System by String. Normally we would do something like the following to get a reference to `List[Int]`:
+
+```bash
+scala> import scala.reflect.runtime.universe._
+import scala.reflect.runtime.universe._
+
+scala> typeOf[List[Int]]
+res0: reflect.runtime.universe.Type = scala.List[Int]
+```
+
+We could also 'ask the compiler' to create a `TypeTag` for us and use the `tpe` method to get to the type:
+
+scala> implicitly[TypeTag[List[Int]]]
+res1: reflect.runtime.universe.TypeTag[List[Int]] = TypeTag[scala.List[Int]]
+
+scala> res1.tpe
+res2: reflect.runtime.universe.Type = scala.List[Int]
+```
+
+The downside of this approach is that we must give the type as a literal like `List[Int]`, and when working with SBT, this is not always possible.
+
+When we break the problem down a bit, would it be possible to construct a TypeTag and give it two pieces of information? For example, I want to get a TypeTag for a `scala.collection.immutable.List` that must be constructed with a `scala.Int`, shouldn't be that hard, or is it?
+
+Lets create the following object in `project/CustomLoader.scala`. We will import some packages from `scala.reflect` that interfers with the `build.sbt` default imports:
+
+```scala
+object CustomLoader {
+  import scala.reflect.api
+  import scala.reflect.api.{TypeCreator, Universe}
+  import scala.reflect.runtime.universe._
+
+  def createTypeTagForST(simpleTypeName: String, classLoader: Option[ClassLoader] = None): TypeTag[_] = {
+    val currentMirror = classLoader
+      .map(cl => scala.reflect.runtime.universe.runtimeMirror(cl))
+      .getOrElse(scala.reflect.runtime.currentMirror)
+    val typSym = currentMirror.staticClass(simpleTypeName)
+    val tpe = internal.typeRef(NoPrefix, typSym, List.empty)
+    val ttag = TypeTag(currentMirror, new TypeCreator {
+      override def apply[U <: Universe with Singleton](m: api.Mirror[U]): U#Type = {
+        assert(m == currentMirror, s"TypeTag[$tpe] defined in $currentMirror cannot be migrated to $m.")
+        tpe.asInstanceOf[U#Type]
+      }
+    })
+    ttag
+  }
+
+  def createTypeTagForHKT(higherKindedTypeName: String = "scala.collection.immutable.List",
+                                    parameterSymbol: String = "scala.Int",
+                                    classLoader: Option[ClassLoader] = None): TypeTag[_] = {
+    val currentMirror = classLoader
+       .map(cl => scala.reflect.runtime.universe.runtimeMirror(cl))
+      .getOrElse(scala.reflect.runtime.currentMirror)
+    val typSym = currentMirror.staticClass(higherKindedTypeName)
+    val paramSym = currentMirror.staticClass(parameterSymbol)
+    val tpe = internal.typeRef(NoPrefix, typSym, List(paramSym.selfType))
+    val ttag = TypeTag(currentMirror, new TypeCreator {
+      override def apply[U <: Universe with Singleton](m: api.Mirror[U]): U#Type = {
+        assert(m == currentMirror, s"TypeTag[$tpe] defined in $currentMirror cannot be migrated to $m.")
+        tpe.asInstanceOf[U#Type]
+      }
+    })
+    ttag
+  }
+}
+```
+
+We have two methods in our 'CustomLoader', one method that creates a TypeTag for a SimpleType like 'scala.Int' and another that creates TypeTags for higher kinded types like a `List[Int]`. The only price we pay is that we loose typing information so the return type is a TypeTag of anything so `TypeTag[_]`
+
+Lets use it. Back in our `build.sbt`, lets create a task that will create both a higher kinded type and a simple type:
+
+```scala
+lazy val task1 = taskKey[Unit]("Load simple types and higher kinded types")
+task1 := {
+  import scala.reflect.runtime.universe._
+  val listOfIntTypeTag: TypeTag[_] = CustomLoader.createTypeTagForHKT("scala.collection.immutable.List", "scala.Int")
+  assert(listOfIntTypeTag.toString == "TypeTag[List[Int]]")
+
+  val intTypeTag: TypeTag[_] = CustomLoader.createTypeTagForST("scala.Int")
+  assert(intTypeTag.toString == "TypeTag[Int]")
+}
+```
+
+We can optionally provide a classloader that can load our custom types for example a `main.Person`. We must first have a task that can provide such a classloader on demand:
+
+```scala
+lazy val getFullClassLoader = taskKey[ClassLoader]("Returns a classloader that can load all project dependencies and compiled sources")
+getFullClassLoader := {
+  val scalaInstance: ScalaInstance = Keys.scalaInstance.value
+  val fullClasspath: Seq[File] = (Keys.fullClasspath in Compile).value.map(_.data)
+  val classDirectory: File = (Keys.classDirectory in Compile).value
+  val classpath = Seq(classDirectory) ++ fullClasspath
+  val cl: ClassLoader = sbt.internal.inc.classpath.ClasspathUtilities.makeLoader(classpath, scalaInstance)
+  cl
+}
+```
+
+This classloader can be used in the following task in where we will load a case class `main.Person` that is in our unmanaged source directory `src/main/scala/main/Person.scala`:
+
+```scala
+package main
+
+import scala.annotation.StaticAnnotation
+
+case class Named(name: String = "", age: String = "") extends StaticAnnotation
+
+@Named(name = "Dennis", age = "43")
+@MyMarker()
+case class Person(name: String, age: Int)
+```
+
+The class has been annotated with both a Java and a Scala annotation:
+
+```java
+package main;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+
+@Retention(RetentionPolicy.RUNTIME)
+public @interface MyMarker {
+    String name() default "N/A";
+    String author() default "Dennis Was Here";
+}
+```
+
+Lets get a `TypeTag` from it and query it for information. Please note that we are using the `getFullClassLoader` task and giving it to the `CustomLoader` so it can resolve all types:
+
+```scala
+lazy val task2 = taskKey[Unit]("Load custom types and annotations")
+task2 := {
+  import scala.reflect.runtime.universe._
+  val cl = getFullClassLoader.value
+  val personTypeTag: TypeTag[_] = CustomLoader.createTypeTagForST("main.Person", Option(cl))
+  assert(personTypeTag.toString == "TypeTag[Person]")
+  assert(personTypeTag.tpe.typeSymbol.annotations.mkString(",") == """main.Named("Dennis", "43"),main.MyMarker""")
+
+  val namedAnnotationTypeTag: TypeTag[_] = CustomLoader.createTypeTagForST("main.Named", Option(cl))
+  assert(namedAnnotationTypeTag.toString == "TypeTag[Named]")
+
+  val maybeNamedAnnotation: Option[Annotation] = personTypeTag.tpe.typeSymbol.annotations.find(_.tree.tpe =:= namedAnnotationTypeTag.tpe)
+
+  assert(maybeNamedAnnotation.isDefined)
 }
 ```
 
