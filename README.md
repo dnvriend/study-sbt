@@ -912,8 +912,7 @@ The default `parallel` behavior is a feature of Sbt and cannot easily be disable
 executing the tasks.
 
 ### Sequentially executing tasks
-When it is necessary to evaluate tasks sequentially, for example, when orchestrating a deployment or forcing tasks to be executed sequentially,
-Sbt v0.13 and later have support for this using the `Def.sequential` task:
+When it is necessary to evaluate tasks sequentially, for example, when orchestrating a deployment or forcing tasks to be executed sequentially, Sbt v0.13 and later have support for this using the `Def.sequential` task:
 
 ```scala
 val runAllSequential = taskKey[String]("all sequential (forced by use of Def.sequential().value")
@@ -1647,6 +1646,119 @@ sbt:study-sbt> inspect task1
 [info] 	*/*:task1
 ```
 
+### Compiling a file in a task
+The following example shows how to create a task that will create a file, compile the file and runs that file. Please note that is contains some code, and most of the code are really just two 'no-operation' classes necessary for the compiler.
+
+The example shows how to create a task, that task sets up some resources that we need. Good practice is to get all the sbt values at the top of your code and then, when all calls to `.value` are done, begin with your logic. This way the flow of execution works as expected.
+
+Compiling files is not trivial, even when using Sbt's abstraction and APIs. Still, in just 100 lines we create a file, compile it and run it which is not bad.
+
+```scala
+val task1 = taskKey[Unit]("")
+
+task1 := {
+    val compilers = Keys.compilers.value
+    val classpath: Seq[File] = (fullClasspath in Compile).value.map(_.data)
+    val outputDir: File = (classDirectory in Compile).value
+    val options: Seq[String] = (scalacOptions in Compile).value
+    val inputs: xsbti.compile.Inputs = (compileInputs in Compile in compile).value
+    val cache: xsbti.compile.GlobalsCache = inputs.setup().cache()
+    val log = streams.value.log
+    implicit val runnerToUse: ScalaRun = runner.value
+
+    val targetDir: File = target.value
+    val fileToCompile: File = targetDir / "Engage.scala"
+    val maxErrors: Int = 1000
+
+    // create the Engage.scala file
+    IO.createDirectory(targetDir)
+    IO.write(fileToCompile, """object Engage extends App { println("Engage!") }""")
+    // compile the file
+
+    compilers.scalac() match {
+      case compiler: sbt.internal.inc.AnalyzingCompiler =>
+        compileSingleFile(
+          compiler,
+          fileToCompile,
+          classpath,
+          outputDir,
+          options,
+          maxErrors,
+          cache,
+          noChanges,
+          noopCallback,
+          log
+        )
+      case _ => sys.error("Expected a 'sbt.internal.inc.AnalyzingCompiler' compiler")
+    }
+
+  // lets run 'Engage'
+  runSingleFile("Engage", classpath, Seq.empty, log)
+}
+
+def runSingleFile(fqcn: String,
+                  classpath: Seq[File],
+                  options: Seq[String],
+                  log: Logger
+                 )(implicit scalaRun: ScalaRun): scala.util.Try[Unit] = {
+  log.info(s"Running: single file: $fqcn")
+  Run.run(fqcn, classpath, options, log).map { _ =>
+    log.info(s"Successfully executed: $fqcn")
+  } recover { case t: Throwable =>
+    log.error(s"Failure running: $fqcn, reason: ${t.getMessage}")
+    throw t
+  }
+}
+
+def compileSingleFile(
+                       compiler: sbt.internal.inc.AnalyzingCompiler,
+                       fileToCompile: File,
+                       classpath: Seq[File],
+                       outputDir: File,
+                       options: Seq[String],
+                       maxErrors: Int,
+                       cache: xsbti.compile.GlobalsCache,
+                       dependencyChanges: xsbti.compile.DependencyChanges,
+                       analysisCallback: xsbti.AnalysisCallback,
+                       log: sbt.internal.util.ManagedLogger): Unit = {
+
+  log.info(s"Compiling a single file: $fileToCompile")
+
+      compiler.apply(
+        Array(fileToCompile),
+        dependencyChanges,
+        classpath.toArray,
+        outputDir,
+        options.toArray,
+        analysisCallback,
+        maxErrors,
+        cache,
+        log
+      )
+}
+
+lazy val noChanges = new xsbti.compile.DependencyChanges {
+  def isEmpty = true
+  def modifiedBinaries = Array()
+  def modifiedClasses = Array()
+}
+
+lazy val noopCallback = new xsbti.AnalysisCallback {
+  override def startSource(source: File): Unit = {}
+  override def mainClass(sourceFile: File, className: String): Unit = {}
+  override def apiPhaseCompleted(): Unit = {}
+  override def enabled(): Boolean = false
+  override def binaryDependency(onBinaryEntry: File, onBinaryClassName: String, fromClassName: String, fromSourceFile: File, context: xsbti.api.DependencyContext): Unit = {}
+  override def generatedNonLocalClass(source: File, classFile: File, binaryClassName: String, srcClassName: String): Unit = {}
+  override def problem(what: String, pos: xsbti.Position, msg: String, severity: xsbti.Severity, reported: Boolean): Unit = {}
+  override def dependencyPhaseCompleted(): Unit = {}
+  override def classDependency(onClassName: String, sourceClassName: String, context: xsbti.api.DependencyContext): Unit = {}
+  override def generatedLocalClass(source: File, classFile: File): Unit = {}
+  override def api(sourceFile: File, classApi: xsbti.api.ClassLike): Unit = {}
+  override def usedName(className: String, name: String, useScopes: java.util.EnumSet[xsbti.UseScope]): Unit = {}
+}
+```
+
 ### Commands
 There are several definition of 'a command' when you are working with SBT. When working with Sbt, the things you type into the console are called 'commands'. These commands-you-type most often trigger a 'task' or a 'setting' like for example 'name' that will evaluate the setting 'name'. Besides a 'setting' or a 'task' there is a third thing that can be executed and that thing is called a 'command'.
 
@@ -1702,7 +1814,13 @@ Original setting count: 667
 Session setting count: 0
 ```
 
+### SBT types to know
+When studying sbt, it is handy to take a look at some parts of its codebase like:
 
+- [(sbt-main) - sbt.Keys](https://github.com/sbt/sbt/blob/1.x/main/src/main/scala/sbt/Keys.scala): Defines all the available keys. This is a great place to start as all keys have a textual description to read what the keys do and also a quick way to search for keywords if you're looking for some functionality.
+- [(sbt-main) - sbt.Defaults](https://github.com/sbt/sbt/blob/1.x/main/src/main/scala/sbt/Defaults.scala): All the default implementation and settings for the available Keys. This is a great place to go look for how a task is wired.
+- [(sbt-main) - sbt.Project](https://github.com/sbt/sbt/blob/1.x/main/src/main/scala/sbt/Project.scala): This class defines an sbt project. So if you type `project` in an sbt-session or type `lazy val myproj = project in file(".")` or just want a reference to the project in a build.sbt and type `project` somewhere in your build.sbt, you get a reference to this type.
+- [(sbt-io) - sbt.io.IO](https://github.com/sbt/io/blob/1.x/io/src/main/scala/sbt/io/IO.scala): The io library is a great place to get ideas to use with your own API. For starters it has some really nice implicit conversion ideas to make working with files and direrectories easy. `IO.write` and `IO.createDirectory` are a great place to start looking at the library.
 
 ## intellij sbt plugin
 - [Scala plugin for IntelliJ IDEA 2017.1](https://blog.jetbrains.com/scala/2017/03/23/scala-plugin-for-intellij-idea-2017-1-cleaner-ui-sbt-shell-repl-worksheet-akka-support-and-more/)
