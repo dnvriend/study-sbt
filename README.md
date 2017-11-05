@@ -1921,6 +1921,41 @@ task2 := {
 }
 ```
 
+### Settings Initialization
+You know by now that an Sbt build consist of one or more project and those projects consists of settings and tasks. The best description on how this process works is described in the [Sbt documentation - Settings Initialization](http://www.scala-sbt.org/1.0/docs/Setting-Initialization.html) which is a 10 minute read. 
+
+The process of initialization consists of two steps:
+
+1. Collect all settings from defined locations
+2. Apply all settings in a predetermined order
+
+### 1. Collecting settings
+Settings are collected from predefined locations:
+
+- User-level project (~/.sbt/<version>):
+  - Load any plugins defined in `~/.sbt/<version>/plugins/*.sbt`
+  - Load any plugins defined in `~/.sbt/<version>/plugins/*.scala`
+  - Load all settings defined in `~/.sbt/<version>/*.sbt`
+  - Load all settings defined in `~/.sbt/<version>/*.scala)`
+- SBT Project-level:
+  - Load any plugins defined in `project/plugins.sbt`
+  - Load any plugins defined in `project/project/*.scala`
+  - Load any settings defined in `project/*.sbt`
+  - Load any settings defined in `project/*.scala`
+  - Load project `*.sbt` files `build.sbt` and friends.
+
+The result of all this resolving is a sequence of `Seq[Setting[_]]` that must be ordered and thus there are settings that will override other settings.
+
+### 2. Apply settings in a predefined order
+The settings collected in the previous step, which is a `Seq[Setting[_]]` must be ordered. There is a predefined way to order these settings and therefor settings will be override other settings. The sequence is:
+
+1. All AutoPlugin settings
+2. All settings defined in `project/Build.scala`
+3. All settings defined in the user directory `~/.sbt/<version>/*.sbt`
+4. All local configurations `build.sbt` 
+
+The effectiv result is a task graph that is used to execute the build.
+
 ### Commands
 There are several definition of 'a command' when you are working with SBT. When working with Sbt, the things you type into the console are called 'commands'. These commands-you-type most often trigger a 'task' or a 'setting' like for example 'name' that will evaluate the setting 'name'. Besides a 'setting' or a 'task' there is a third thing that can be executed and that thing is called a 'command'.
 
