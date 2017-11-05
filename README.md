@@ -2068,7 +2068,105 @@ Original setting count: 667
 Session setting count: 0
 ```
 
-### SBT types to know
+## Serializing Typesafe Configuration to JSON
+It is possible to serialize Typesafe configuration to JSON. This can be handy when integrating with other tools that need JSON as input or even YAML. We need to add a dependency on the [Typesafe Configuration library](https://github.com/lightbend/config). Just create a new file `project/dependencies.sbt` and put the following in the file:
+
+```
+libraryDependencies += "com.typesafe" % "config" % "1.3.1"
+```
+
+
+```scala
+lazy val task1 = taskKey[String]("Serializing Typesafe Config to JSON")
+
+task1 := {
+  import com.typesafe.config._
+  val conf: Config = ConfigFactory.parseString(
+    """
+      | akka {
+      |    boolean_one = true
+      |    boolean_two = on
+      |    list_of_string = [1, 2, 3, 4, 5]
+      |    number = 1
+      |    timeout = 10ms
+      |    name = "dennis"
+      |    person = {
+      |      name = "dennis"
+      |      age = 42
+      |    }
+      | }
+    """.stripMargin)
+
+  val output: String = conf.root().render(ConfigRenderOptions.concise())
+  val json = """{"akka":{"number":1,"boolean_two":"on","person":{"name":"dennis","age":42},"name":"dennis","boolean_one":true,"timeout":"10ms","list_of_string":[1,2,3,4,5]}}"""
+  assert(output == json)
+  output
+}
+```
+
+From this converted Typesafe Config, we can generate YAML by means of the [circe-yaml](https://github.com/circe/circe-yaml) library which translates [SnakeYAML](https://bitbucket.org/asomov/snakeyaml)'s AST into [circe](https://github.com/circe/circe)'s AST. It enables parsing [YAML](https://yaml.org/) 1.1 documents into circe's Json AST and using Circe to parse JSON and write YAML documents.
+
+Add the following to `project/dependencies.sbt`:
+
+```
+libraryDependencies += "io.circe" %% "circe-yaml" % "0.6.1"
+```
+
+We can now create a second task that uses the first task to generate JSON from the Typesafe configuration and generates a YAML that can be used by tools. YAML starts out simple but gets notoriously complex when you want to use it for real.
+
+```scala
+lazy val task2 = taskKey[String]("Converting JSON to YAML")
+task2 := {
+  import cats.syntax.either._
+  import _root_.io.circe.yaml._
+  import _root_.io.circe.yaml.syntax._
+  val jsonString: String = task1.value
+  val jsonAST = _root_.io.circe.parser.parse(jsonString).valueOr(throw _)
+
+  // some options in generating YAML strings
+  val yamlTwoSpaces: String = jsonAST.asYaml.spaces2
+  val yamlFourSpaces: String = jsonAST.asYaml.spaces4
+  val yamlPretty: String = _root_.io.circe.yaml.Printer(dropNullKeys = true,
+      mappingStyle = Printer.FlowStyle.Block)
+      .pretty(jsonAST)
+
+  println(yamlPretty)
+
+  yamlPretty
+}
+```
+
+## Setting the loglevel
+The logLevel of Sbt can be set to:
+
+- sbt.util.Level.Debug: shows a lot more information!
+- sbt.util.Level.Info: (default): is the default setting and shows a normal amount of information
+- sbt.util.Level.Warn: shows only warnings
+- sbt.util.Level.Error: shows only errors
+
+The default setting is `sbt.util.Level.Info` and the `logLevel` can be changed:
+
+```bash
+sbt:study-sbt> set logLevel := sbt.util.Level.Debug
+[info] Defining *:logLevel
+[info] The new value will be used by *:evicted, *:update
+[info] Reapplying settings...
+[info] Set current project to study-sbt (in build file:/Users/dennis/projects/study-sbt/)
+```
+
+Be ready for a lot more information!
+
+You can change the loglevel back to Info by reloading the project or by setting the loglevel back to Info:
+
+```bash
+sbt:study-sbt> set logLevel := sbt.util.Level.Info
+[info] Defining *:logLevel
+[info] The new value will be used by *:evicted, *:update
+[info] Reapplying settings...
+[info] Set current project to study-sbt (in build file:/Users/dennis/projects/study-sbt/)
+```
+
+## SBT types to know
 When studying sbt, it is handy to take a look at some parts of its codebase like:
 
 - [(sbt-main) - sbt.Keys](https://github.com/sbt/sbt/blob/1.x/main/src/main/scala/sbt/Keys.scala): Defines all the available keys. This is a great place to start as all keys have a textual description to read what the keys do and also a quick way to search for keywords if you're looking for some functionality.
