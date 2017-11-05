@@ -400,6 +400,26 @@ Now lets take a quick look at a full inspect output. It contains the following:
 - __Delegatess:__ A setting has a key and a scope. A request for a key in a scope 'A' may be delegated to another scope if 'A' doesn’t define a value for the key. The delegation chain is well-defined and is displayed in the Delegates section of the inspect command. The Delegates section shows the order in which scopes are searched when a value is not defined for the requested key,
 - __Related__: lists all of the definitions of a key so read these listings as 'there are also these keys in these scopes you can take a look at',
 
+### Scope Delegation
+[Scope delegation](http://www.scala-sbt.org/1.x/docs/Scope-Delegation.html) is a well-defined fallback search path in Sbt, This feature allows you to set a value once in a more general scope, allowing multiple more-specific scopes to inherit the value. 
+
+Lets recap Scopes for a moment:
+
+- A scope is a tuple of components in three axes: (the subproject axis, the configuration axis, and the task axis).
+- There’s a special scope component `*` (also called Global) for any of the scope axes.
+- There’s a special scope component `ThisBuild` (written as '{.}' in shell) for the subprojects axis only.
+- Test extends Runtime, and Runtime extends Compile configuration.
+- A key placed in `build.sbt` is scoped to (${current subproject}, *, *) by default.
+- A key can be further scoped using .in(...) method.
+
+The rules for scope delegation are:
+
+- __Rule 1__: Scope axes have the following precedence: the subproject axis, the configuration axis, and then the task axis.
+- __Rule 2__: Given a scope, delegate scopes are searched by substituting the task axis in the following order: the given task scoping, and then * (Global), which is non-task scoped version of the scope.
+- __Rule 3__: Given a scope, delegate scopes are searched by substituting the configuration axis in the following order: the given configuration, its parents, their parents and so on, and then * (Global, same as unscoped configuration axis).
+- __Rule 4__: Given a scope, delegate scopes are searched by substituting the subproject axis in the following order: the given subproject, ThisBuild, and then * (Global).
+__Rule 5__: A delegated scoped key and its dependent settings/tasks are evaluated without carrying the original context.
+
 ### Custom Configurations
 We can also create our own configurations. Lets start right away by defining a configuration called 'my-config' that 
 will be used by the task 'MyOtherTask':
