@@ -2136,6 +2136,79 @@ task2 := {
 }
 ```
 
+## A progress bar
+Sometimes things can take some time, for example, deploying an application. Most of the time Sbt would just block until ready but wouldn't it be nice to see a nice progress bar?
+
+Based on code I saw on [quaich](https://github.com/quaich-project/quartercask/blob/0c8a31c3430fb574e780c0f931bff0a0f5019fcb/util/src/main/scala/codes/bytes/quartercask/s3/AWSS3.scala#L71), [a Scala “Serverless” Microframework for AWS Lambda](https://www.youtube.com/watch?v=xHLQcS5BGbo) as presented by Brendan McAdams, he has taken the code from the [S3 Plugin](https://github.com/sbt/sbt-s3/blob/master/src/main/scala/S3Plugin.scala#L128) we can create the following:
+
+```scala
+/**
+  * Progress bar code borrowed from https://github.com/sbt/sbt-s3/blob/master/src/main/scala/S3Plugin.scala
+  */
+def progressBar(percent:Int): String = {
+  val b="=================================================="
+  val s="                                                  "
+  val p=percent/2
+  val z:StringBuilder=new StringBuilder(80)
+  z.append("\r[")
+  z.append(b.substring(0,p))
+  if (p<50) {z.append("=>"); z.append(s.substring(p))}
+  z.append("]   ")
+  if (p<5) z.append(" ")
+  if (p<50) z.append(" ")
+  z.append(percent)
+  z.append("%   ")
+  z.mkString
+}
+
+lazy val task1 = taskKey[Unit]("")
+task1 := {
+  println(progressBar(0))
+  println(progressBar(25))
+  println(progressBar(33))
+  println(progressBar(50))
+  println(progressBar(66))
+  println(progressBar(75))
+  println(progressBar(100))
+}
+```
+
+It would output the following:
+
+```bash
+sbt:study-sbt> task1
+[=>                                                  ]     0%
+[=============>                                      ]    25%
+[=================>                                  ]    33%
+[==========================>                         ]    50%
+[==================================>                 ]    66%
+[======================================>             ]    75%
+[==================================================]   100%
+[success] Total time: 0 s, completed Nov 5, 2017 4:56:14 PM
+```
+
+What we need is some source that counts from 0 to 100 and that has a function to call back to like:
+
+```scala
+lazy val task1 = taskKey[Unit]("Showing a progress bar")
+task1 := {
+  def goForIt(progress: Int => Unit): Unit = {
+    def loop(x: Int): Int = {
+      if (x <= 100) {
+        Thread.sleep(100)
+        progress(x)
+        loop(x + 10)
+      } else Math.min(100, x)
+    }
+    loop(0)
+  }
+
+  goForIt(progress => println(progressBar(progress)))
+}
+```
+
+Of course, normally we would register some kind of progress listener, but this will do for now.
+
 ## Setting the loglevel
 The logLevel of Sbt can be set to:
 
