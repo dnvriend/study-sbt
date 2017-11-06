@@ -1230,39 +1230,6 @@ t1 := {
 Please note the `.value` call at the end of `Def.settingDyn`, it is easy to forget. Also note the we are using `Def.setting` here, until now we only
 have been using 'Def.task', but that doesn't work here.
 
-### Getting user input
-There are many ways for getting the users input, for example, using the Parser Combinator libary of sbt, but the following way is also very easy and has
-been taken from the [AWS Lambda Plugin](https://github.com/quaich-project/quartercask/blob/master/lambda/src/main/scala/codes/bytes/quartercask/lambda/AWSLambdaPlugin.scala)
-example:
-
-```scala
-lazy val t1 = taskKey[Unit]("")
-t1 := {
-  val name = readInput("What is your name?")
-  val age = readInput("What is your age?")
-  streams.value.log.info(s"Hello '$name', you are '$age' years old!")
-}
-
-def readInput(prompt: String): String = {
-  SimpleReader.readLine(s"$prompt\n") getOrElse {
-    val badInputMessage = "Unable to read input"
-    val updatedPrompt = if (prompt.startsWith(badInputMessage)) prompt else s"$badInputMessage\n$prompt"
-    readInput(updatedPrompt)
-  }
-}
-```
-
-console output:
-
-```bash
-sbt:study-sbt> t1
-What is your name?
-Dennis
-What is your age?
-42
-[info] Hello 'Dennis', you are '42' years old!
-```
-
 ### Scopes
 Key -> Value pairs play an important role in Sbt as they let us define settings and settings let us configure our projects and a build is made up out of one or more projects. Keys can easily be configured so that they have a value in a specific Configuration, Task or (Configuration,Task) combination. 
 
@@ -1355,13 +1322,46 @@ All projects and all configuration and all tasks in the current build only.
 ### Global Scope
 The scope ['Global'](http://www.scala-sbt.org/1.x/docs/Scopes.html#Global+scope+component) is handy to define settings that apply to all projects everywhere on your computer or your enterprise, and all of there configurations and all of there tasks. I guess that covers 'Global'. This scope only makes sense if you create plugins and you want to add the setting to all projects everywhere. If you can remember that Keys are scoped on [Axis](http://www.scala-sbt.org/1.x/docs/Scopes.html#Scope+axes), so (Project/Configuration:Task) then the difference between the scope 'ThisBuild' and 'Global' is that for 'ThisBuild' the axis looks like ({.}/*:*) and for Global the axis looks like (*/*:*).
 
+### Getting user input
+There are many ways for getting the users input, for example, using the Parser Combinator libary of sbt, but the following way is also very easy and has
+been taken from the [AWS Lambda Plugin](https://github.com/quaich-project/quartercask/blob/master/lambda/src/main/scala/codes/bytes/quartercask/lambda/AWSLambdaPlugin.scala)
+example:
+
+```scala
+lazy val t1 = taskKey[Unit]("")
+t1 := {
+  val name = readInput("What is your name?")
+  val age = readInput("What is your age?")
+  streams.value.log.info(s"Hello '$name', you are '$age' years old!")
+}
+
+def readInput(prompt: String): String = {
+  SimpleReader.readLine(s"$prompt\n") getOrElse {
+    val badInputMessage = "Unable to read input"
+    val updatedPrompt = if (prompt.startsWith(badInputMessage)) prompt else s"$badInputMessage\n$prompt"
+    readInput(updatedPrompt)
+  }
+}
+```
+
+console output:
+
+```bash
+sbt:study-sbt> t1
+What is your name?
+Dennis
+What is your age?
+42
+[info] Hello 'Dennis', you are '42' years old!
+```
+
 ## Parsing user input
 SBT supports [parsing user input](http://www.scala-sbt.org/1.x/docs/Parsing-Input.html) as part of a task. To parse use input we use the `inputKey` eg:
 
 ```scala
 import sbt.complete.DefaultParsers._
 
-val hello = inputKey[String]("Hello World")
+lazy val hello = inputKey[String]("Hello World")
 
 hello := {
   val name: String = (Space ~> StringBasic).parsed
@@ -1372,13 +1372,12 @@ hello := {
 ```
 
 Sbt uses the sbt-parser-combinator library and parsing user input uses a combination of parsers defined in the
-standard library and your own custom parsers. I have a [study project](https://github.com/dnvriend/sbt-parser-test) that shows how you can use the sbt parser
-library and how to build your own parsers.
+standard library and your own custom parsers. I have a [study project](https://github.com/dnvriend/sbt-parser-test) that shows how you can use the sbt parser library and how to build your own parsers.
 
 It is possible to reuse the `inputTask` by another task, to do that you could do the following:
 
 ```scala
-val useHello = taskKey[String]("Using hello")
+lazy val useHello = taskKey[String]("Using hello")
 
 useHello := {
   val result = hello.toTask(" Dennis").value
@@ -1392,6 +1391,84 @@ Not that we must use a space, as our parser states that the user input should st
 
 ```scala
 val name: String = (Space ~> StringBasic).parsed
+```
+
+Alternatively we can use [Def.spaceDelimited](https://github.com/sbt/sbt/blob/1.x/main-settings/src/main/scala/sbt/Def.scala#L145) to parse user input which is a default Parser for splitting input into space-separated arguments:
+
+```scala
+lazy val hello = inputKey[String]("Hello World")
+
+hello := {
+  val names: Seq[String] = Def.spaceDelimited("Type names").parsed
+  val namesString: String = names.mkString(",")
+  val greeting = s"Hello $namesString"
+  streams.value.log.info(greeting)
+  greeting
+}
+
+lazy val useHello = taskKey[Unit]("Using hello")
+
+useHello := {
+  val result = hello.toTask(" a b c d").value
+  assert(result == "Hello a,b,c,d")
+}
+```
+
+### Parsing input using Parsers
+When we look at a [sbt.internal.util.complete.Parser[T]](https://github.com/sbt/sbt/blob/1.x/internal/util-complete/src/main/scala/sbt/internal/util/complete/Parser.scala), it basically is a function `String => Option[T]`, it accepts a String to parse and produces a value wrapped in Some if parsing succeeds or None if it fails.
+
+Sbt comes with several built-in parsers defined in `sbt.complete.DefaultParsers`. Some commonly used built-in parsers are:
+
+- __Space, NotSpace, OptSpace, and OptNotSpace__: for parsing spaces or non-spaces, required or not.
+- __StringBasic__: for parsing text that may be quoted.
+- __IntBasic__: for parsing a signed Int value.
+- __Digit and HexDigit__: for parsing a single decimal or hexadecimal digit.
+- __Bool__: for parsing a Boolean value
+
+### Tab Completion
+Tab completion is a feature of parsers to show examples of values that are possible to input:
+
+```scala
+lazy val task1 = inputKey[Unit]("")
+task1 := {
+    val names: Seq[String] = Def.spaceDelimited("Type names")
+      .examples(
+          "Jean Luc Picard",
+          "Jonathan Archer",
+          "Benjamin Sisko",
+      ).parsed
+
+    println(names)
+}
+```
+
+### Storing previous computed values and use for tab completing
+Evaluated tasks can be stored either on disk or in memory and reused for example in Parsers for tab completion:
+
+```scala
+// task1 will be triggered by some other task
+// or will be evaluated manually
+lazy val task1 = taskKey[Seq[String]]("")
+task1 := Seq("a", "b", "c", "d")
+task1 := task1.keepAs(task1).value
+
+// independent task, will only load state when stored by
+// some other task
+lazy val task2 = inputKey[Unit]("")
+task2 := {
+    import sbt.complete.DefaultParsers._
+    val parser = Defaults.getForParser(task1)((state, maybeSeqString) => {
+        val strings = maybeSeqString.getOrElse(Seq("a1", "b1", "c1"))
+        Space ~> StringBasic.examples(strings: _*)
+    })
+    Def.inputTask {
+        val result: String = parser.parsed
+        println(result)
+    }
+}.evaluated
+
+// see: https://gitter.im/sbt/sbt/archives/2015/08/07
+// ==> And the two are a pair. I think getForParser/keepAs are in memory and loadForParser/storeAs is in disk
 ```
 
 ### Common SBT Commands
