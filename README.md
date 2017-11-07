@@ -2233,6 +2233,82 @@ task2 := {
 }
 ```
 
+### Parsing Typesafe Config
+Typesafe config can be parsed to case classes for easy use in applications:
+
+```scala
+lazy val task1 = taskKey[Unit]("")
+
+task1 := {
+  import pureconfig._
+  import com.typesafe.config._
+  import scala.collection.mutable
+  import scala.collection.JavaConverters._
+  import pureconfig.error.ConfigReaderFailures
+
+  case class HashKey(name: String, `type`: String)
+  case class SortKey(name: String, `type`: String)
+  case class DynamoDbTable(name: String, hashKey: HashKey, sortKey: Option[SortKey], stream: Option[String], rcu: Int, wcu: Int)
+
+  val conf: Config = ConfigFactory.parseString(
+    """
+      |dynamodb {
+      |  table1 {
+      |    name = my-table-1
+      |    hash-key = {
+      |     name = myHashKey
+      |     type = S
+      |    }
+      |    range-key = {
+      |     name = myRangeKey
+      |     type = N
+      |    }
+      |    stream = KEYS_ONLY
+      |    rcu = 1
+      |    wcu = 1
+      |  }
+      |  table2 {
+      |    name = my-table-2
+      |    hash-key = {
+      |     name = myHashKey
+      |     type = S
+      |    }
+      |    range-key = {
+      |     name = myRangeKey
+      |     type = N
+      |    }
+      |    stream = KEYS_ONLY
+      |    rcu = 1
+      |    wcu = 1
+      |  }
+      |  table3 {
+      |    name = my-table-3
+      |    hash-key = {
+      |     name = myHashKey
+      |     type = S
+      |    }
+      |    range-key = {
+      |     name = myRangeKey
+      |     type = N
+      |    }
+      |    stream = KEYS_ONLY
+      |    rcu = 1
+      |    wcu = 1
+      |  }
+      |}
+    """.stripMargin
+    )
+
+  val dynamodb = conf.getConfig("dynamodb")
+  val result: mutable.Set[Either[ConfigReaderFailures, DynamoDbTable]] = {
+    dynamodb.root().keySet().asScala.map(dynamodb.getConfig).map { conf =>
+      loadConfig[DynamoDbTable](conf)
+    }
+  }
+  println(result)
+}
+```
+
 ## A progress bar
 Sometimes things can take some time, for example, deploying an application. Most of the time Sbt would just block until ready but wouldn't it be nice to see a nice progress bar?
 
