@@ -2220,21 +2220,112 @@ Original setting count: 644
 Session setting count: 0
 ```
 
-### Commands and state
-Getting state in a command can be done with the following:
+### Commands, Settings, Tasks and state
+Commands and Tasks use the `State` object to store temporary values that must be passed between commands and tasks within a single session without reloading the project. For example:
 
 ```scala
-lazy val age = settingKey[Int]("Age of a person")
-age in Global := 42
+import sjsonnew.BasicJsonProtocol._
+// setting key can only be changed with a 'reload'
+// and reloading is something we want to avoid
+lazy val personName = settingKey[String]("The name of a person")
+personName := "Dennis"
 
-def printAge = Command.command("printAge") { state =>
-  val extracted = Project.extract(state)
-  println("Age setting: " + extracted.structure.data.get(Global, age.key))
-  state
+lazy val personAge = settingKey[Int]("The age of a person")
+personAge := 42
+
+lazy val savePersonName = taskKey[String]("Saves the person name")
+savePersonName := {
+  personName.?.value.getOrElse("Unknown")
+}
+savePersonName := savePersonName.storeAs(savePersonName).value
+
+lazy val savePersonAge = taskKey[Int]("Saves the person age")
+savePersonAge := personAge.?.value.getOrElse(0)
+savePersonAge := savePersonAge.storeAs(savePersonAge).value
+
+lazy val printPerson = taskKey[Unit]("Prints person")
+printPerson := {
+  val log = streams.value.log
+  val buildState = state.value
+  val maybeName = personName.?.value
+  val maybeAge = personAge.?.value
+  val name = maybeName.orElse(SessionVar.load(savePersonName.scopedKey, buildState)).getOrElse("Unknown")
+  val age = maybeAge.orElse(SessionVar.load(savePersonAge.scopedKey, buildState)).getOrElse(-1)
+  println(s"Person from state attributes: Person(${buildState.get(personName.key)}, ${buildState.get(personAge.key)})")
+  println(s"Person from settings, then session else unknown: Person($name, $age)")
 }
 
-commands += printAge
+lazy val savePerson = taskKey[Unit]("Gets the value of Pi")
+savePerson := {
+  val buildState = state.value
+  val log = streams.value.log
+  val maybeName = personName.?.value
+  val maybeAge = personAge.?.value
+  val name = maybeName.orElse(SessionVar.load(savePersonName.scopedKey, buildState)).getOrElse("Unknown")
+  val age = maybeAge.orElse(SessionVar.load(savePersonAge.scopedKey, buildState)).getOrElse(-1)
+  log.info(s"Person from settings: Person($name, $age)")
+
+  // is not used, just printed
+  println("Name from saved session state:" + SessionVar.load(savePersonName.scopedKey, buildState))
+  println("Age from saved session state:" + SessionVar.load(savePersonAge.scopedKey, buildState))
+
+  // store the information in the session vars
+  // note that sessionVars uses scopedKey of Task
+  // session vars's context are Task values...
+  val vars: SessionVar.Map = buildState.get(sessionVars).get // note the .get
+  // store the name and age in the session
+  vars.put(savePersonName, "Mr Bean")
+  vars.put(savePersonAge, 50)
+  log.info("Contents of the session vars: " + vars)
+
+  println(s"Person from state attributes: Person(${buildState.get(personName.key)}, ${buildState.get(personAge.key)})")
+
+  // store the name and age in the state attribute map
+  // note that the attribute map of State uses the AttributeKey, which is the setting
+  val newState = buildState.put(personName.key, "Jean Luc Picard")
+    .put(personAge.key, Int.MinValue)
+
+  println(s"Person from state attributes after change: Person(${newState.get(personName.key)}, ${newState.get(personAge.key)})")
+
+  // the thing is, newState is gone now, therefore we have commands...
+}
+
+def loadPerson = Command.command("loadPerson") { state =>
+  val extracted = Project.extract(state)
+  // note that the extracted project settings are 'immutable', we don't want to reload
+  println("Get the name from a setting: " + extracted.get(personName))
+  println("Get the age from a setting: " + extracted.get(personAge))
+
+  // session variables
+  println("Contents of the session vars: " + state.get(sessionVars))
+  // we can reuse the 'age' key, by putting a value in the mutable attribute map,
+  // which doesn't need a 'reload' to be changed, just a call to 'put' would be enough
+  println("Get name from a previous command from the (state) attribute map: " + state.get(savePersonName.key))
+  println("Get age from a previous command from the (state) attribute map: " + state.get(savePersonName.key))
+
+  // load session vars
+  // note that session vars load values that are the result
+  // of tasks, so the keys are of tasks
+  val maybeName = SessionVar.load(savePersonName.scopedKey, state)
+  val maybeAge = SessionVar.load(savePersonAge.scopedKey, state)
+  println(s"Person from loaded session vars (task keys): $maybeName, $maybeAge")
+  println(s"Person from state attributes (setting keys): Person(${state.get(personName.key)}, ${state.get(personAge.key)})")
+
+  // note that the attribute state
+  // are attribute keys and are settings keys
+  state
+    .put(personName.key, "from-command")
+    .put(personAge.key, Int.MaxValue)
+}
+
+commands += loadPerson
 ```
+
+The previous code shows a setting, a command and a task. The setting must be used as a definition of a value, like Pi. This is a stable value for the session. Granted, Pi can be changed by typing `set pi := 6.28` or by changing the value in `build.sbt`, but this needs a reload of the session, and basically you get a new session. So settings can be seen as 'immutable' values, in a single session at least. The mutable part of a session is the State's attributeMap that can be accessed by a Command or a Task.
+
+Both a Command and a Task can access the State object. A Command gets a reference to State, and can directly act upon it. The Task must get a reference to the state with the task `state.value`, and can then operate on it.  On `State` you can call among others the methods `get(key): Option[T]`, `put(key, value): State`, `remove(key): State`, `update(key)(f: Option[A] => B): State` and `has(key): Boolean` to operate on the attribute map. This is one way a command can change the behavior of tasks without needing to reload the project.
+
+A second way to store state is by means of the methods `keepAs` and `storeAs` methods on a `Task`. These values are are stored as session variables and can be persisted.
 
 ### Commands construction
 A command needs several things to be constructed, depending on the construction method of course. The fully complete list is:
@@ -2506,6 +2597,29 @@ When studying sbt, it is handy to take a look at some parts of its codebase like
 - [(sbt-main) - sbt.Defaults](https://github.com/sbt/sbt/blob/1.x/main/src/main/scala/sbt/Defaults.scala): All the default implementation and settings for the available Keys. This is a great place to go look for how a task is wired.
 - [(sbt-main) - sbt.Project](https://github.com/sbt/sbt/blob/1.x/main/src/main/scala/sbt/Project.scala): This class defines an sbt project. So if you type `project` in an sbt-session or type `lazy val myproj = project in file(".")` or just want a reference to the project in a build.sbt and type `project` somewhere in your build.sbt, you get a reference to this type.
 - [(sbt-io) - sbt.io.IO](https://github.com/sbt/io/blob/1.x/io/src/main/scala/sbt/io/IO.scala): The io library is a great place to get ideas to use with your own API. For starters it has some really nice implicit conversion ideas to make working with files and direrectories easy. `IO.write` and `IO.createDirectory` are a great place to start looking at the library.
+
+## Sbt's Design Overview
+The following is an essential read to learn the [design of Sbt](https://github.com/sbt/sbt/wiki/Design-Overview) and is part of the [Sbt wiki](https://github.com/sbt/sbt/wiki).
+
+The `reload` command's job is to produce a `BuildStructure` and put it in `State` for future commands like task execution to use. `BuildStructure` is the data type that represents everything about a build: projects and relationships, evaluated settings, and logging configuration. Once the `reload` command has the `BuildStructure` value, it stores it in `State.attributes`, keyed by `Keys.stateBuildStructure`.
+
+To pass information between commands, without the need to reload the project, the `State` object contains an attribute map. Because the `State` object is passed between commands, it is the ideal way to pass information between commands. `State.attributes` is a typesafe map. Keys are of type `AttributeKey[T]` and you can only associate values of type `T` with that key. State has convenience methods set/get that delegate to the underlying attributes map by means of extension methods. On `State` you can call among others the methods `get(key): Option[T]`, `put(key, value): State`, `remove(key): State`, `update(key)(f: Option[A] => B): State` and `has(key): Boolean` to operate on the attribute map. This is one way a command can change the behavior of tasks without needing to reload the project: it sets attributes in `State` and the task accesses `State` via the `state` task.
+
+## Project.extract
+The `Project.extract(state)` call at its core calls `state.get(Keys.stateBuildStructure)` to get the `BuildStructure` back. It does some other things as well:
+
+- throws a nicer exception if a project isn't loaded
+- loads the session with `state.get(Keys.sessionSettings)`
+- returns the session and structure in an `Extracted` value, which provides a better interface to them
+
+## Session settings
+
+The SessionSettings datatype tracks a few pieces of information that are not persisted. The two main pieces are:
+
+- the current project: changed by the project command, for example
+- additional settings: added by the set command, for example
+
+SessionSettings only tracks this information; setting these values on a SessionSettings object does not apply the changes. In particular, the project has to be reloaded for the additional settings to take effect. Reloading checks the settings for problems like references to non-existing settings and then the settings are reevaluated. The release plugin has a reapply method that shows the proper way to add settings to the current project.
 
 ## intellij sbt plugin
 - [Scala plugin for IntelliJ IDEA 2017.1](https://blog.jetbrains.com/scala/2017/03/23/scala-plugin-for-intellij-idea-2017-1-cleaner-ui-sbt-shell-repl-worksheet-akka-support-and-more/)
