@@ -2266,6 +2266,33 @@ lazy val pong = Command.command("pong") { state =>
 commands += pong
 ```
 
+State and also be persisted using the `storeAs` method:
+
+```scala
+import sjsonnew.BasicJsonProtocol._
+import scala.compat.Platform
+
+lazy val msg = settingKey[String]("")
+lazy val ping = taskKey[String]("")
+ping in Global := {
+  val buildState = state.value
+  println("ping: " + buildState.get(msg.key))
+  "ping" + Platform.currentTime
+}
+// store in session
+ping in Global := (ping in Global).storeAs(ping).value
+
+lazy val pong = Command.command("pong") { state =>
+  // get persisted state, pass the state, get a new state back
+  val (st, result) = SessionVar.loadAndSet((ping in Global).scopedKey, state)
+  println("pong: " + result)
+  // set attribute
+  st.put(msg.key, "pong: " + Platform.currentTime)
+}
+
+commands += pong
+```
+
 A more complex example is below:
 
 ```scala
