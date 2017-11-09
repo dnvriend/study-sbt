@@ -2221,7 +2221,52 @@ Session setting count: 0
 ```
 
 ### Commands, Settings, Tasks and state
-Commands and Tasks use the `State` object to store temporary values that must be passed between commands and tasks within a single session without reloading the project. For example:
+Commands and Tasks use the `State` object to store temporary values that must be passed between commands or between a command and tasks, command to task, one-way only within a single session without reloading the project. For example:
+
+```scala
+lazy val msg = settingKey[String]("")
+
+lazy val ping = taskKey[Unit]("")
+ping := {
+  val buildState = state.value
+  println(buildState.get(msg.key))
+  buildState.put(msg.key, "ping")
+}
+
+lazy val pong = Command.command("pong") { state =>
+  println(state.get(msg.key))
+  state.put(msg.key, "pong")
+}
+
+commands += pong
+```
+
+To create a ping/pong, the Command has to save a value into the state attributes, and the task has to save a value in the session, by means of the `keepAs` method:
+
+```
+lazy val msg = settingKey[String]("")
+
+lazy val ping = taskKey[String]("")
+ping in Global := {
+  val buildState = state.value
+  // command to task (read from state attributes)
+  println(buildState.get(msg.key))
+  "ping"
+}
+// store in session
+ping in Global := (ping in Global).keepAs(ping).value
+
+lazy val pong = Command.command("pong") { state =>
+  val extracted = Project.extract(state)
+  val session = state.get(sessionVars).get
+  println(session.get(ping in Global))
+  state.put(msg.key, "pong")
+}
+
+commands += pong
+```
+
+A more complex example is below:
 
 ```scala
 import sjsonnew.BasicJsonProtocol._
