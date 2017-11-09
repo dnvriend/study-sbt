@@ -2115,10 +2115,9 @@ There are several definition of 'a command' when you are working with SBT. When 
 
 There is a technical distinction in sbt between tasks, which are 'inside' the build definition, and commands, which manipulate the build definition itself. Most often it is not necessary to create commands because most activities can be implemented by chaining multiple tasks.
 
-You would need a task if you need to manipulate the state of the build.
+To recap, a command looks similar to a task, in that they are both a named operation that can be executed from the console, and they both can execute arbitraty code. The main difference is that a command takes as a parameter, 'the entire state of the build', which is represented by [State](http://www.scala-sbt.org/1.x/docs/Build-State.html), and it must compute a new State. So a command's responsibility is to compute a new build state and a task's responsibility is to execute tasks for example, do some work. So 'a command computes state' and a task 'does the work' ie. creates the side-effects necessary when working with a build tool.
 
-
-Lets create an helloworld build:
+Lets create an helloworld command that uses the [Command.command](https://github.com/sbt/sbt/blob/1.x/main-command/src/main/scala/sbt/Command.scala#L87) method that construct a no-argument command with the given name and effect:
 
 ```scala
 lazy val hello = Command.command("hello") { state =>
@@ -2129,40 +2128,128 @@ lazy val hello = Command.command("hello") { state =>
 commands += hello
 ```
 
-The previous creates a command and stores it into the value 'hello' and adds the command to the list of commands of Sbt.
-
-We can now execute the command by typing `hello`:
+After we've added the `hello` command to the list of commands of the build,  we can it by typing `hello`:
 
 ```bash
 sbt:study-sbt> hello
 Hello there!
 ```
 
-The point of working with Commands is to 'get to the state of the project', so we need to extract information from it:
+Lets look at some other ways to construct commands like [Command.args](https://github.com/sbt/sbt/blob/1.x/main-command/src/main/scala/sbt/Command.scala#L106) that constructs a multi-argument command with the given name, tab completion display and effect:
 
 ```scala
-lazy val hello = Command.command("hello") { state =>
-  val extracted = Project.extract(state)
-  import extracted._
-  println("Current build: " + currentRef.build)
-  println("Current project: " + currentRef.project)
-  println("Original setting count: " + session.original.size)
-  println("Session setting count: " + session.append.size)
+val helloAll = Command.args("helloAll", "<name>") { (state: State, args: Seq[String]) =>
+  println(s"Hi $args")
+  state
+}
 
+commands += helloAll
+```
+
+We can execute it with:
+
+```bash
+sbt:study-sbt> helloAll a b c d e
+Hi List(a, b, c, d, e)
+```
+
+The previous command accepts multiple arguments, hence the argument list, bust we can command that accepts only a single argument with the method [Command.single](https://github.com/sbt/sbt/blob/1.x/main-command/src/main/scala/sbt/Command.scala#L96) that constructs a single-argument command with the given name and effect:
+
+```scala
+def hello = Command.single("hello") { (state: State, input: String) =>
+  println(s"Hello $input")
   state
 }
 
 commands += hello
 ```
 
-We can now take a look at the extracted project state:
+The output is:
 
 ```bash
-sbt:study-sbt> hello
+sbt:study-sbt> hello foo bar baz
+Hello foo bar baz
+```
+
+We can also get information from the current state:
+
+```scala
+def printState = Command.command("printState") { state =>
+  import state._
+  println(definedCommands.size + " registered commands")
+  println("commands to run: " + show(remainingCommands))
+  println()
+  println("original arguments: " + show(configuration.arguments))
+  println("base directory: " + configuration.baseDirectory)
+  println()
+  println("sbt version: " + configuration.provider.id.version)
+  println("Scala version (for sbt): " + configuration.provider.scalaProvider.version)
+  println()
+
+  val extracted = Project.extract(state)
+  import extracted._
+  println("Current build: " + currentRef.build)
+  println("Current project: " + currentRef.project)
+  println("Original setting count: " + session.original.size)
+  println("Session setting count: " + session.append.size)
+  state
+}
+
+def show[T](s: Seq[T]) = {
+  s.map("'" + _ + "'").mkString("[", ", ", "]")
+}
+commands += printState
+```
+
+When run with the following command `;printState;clean;run`, we get the following output:
+
+```bash
+sbt:study-sbt> ;printState;clean;run
+56 registered commands
+commands to run: ['Exec(clean, None, Some(CommandSource(console0)))', 'Exec(run, None, Some(CommandSource(console0)))', 'Exec(shell, None, None)']
+
+original arguments: []
+base directory: /Users/dennis/projects/study-sbt
+
+sbt version: 1.0.3
+Scala version (for sbt): 2.12.4
+
 Current build: file:/Users/dennis/projects/study-sbt/
 Current project: study-sbt
-Original setting count: 667
+Original setting count: 644
 Session setting count: 0
+```
+
+### Commands and state
+Getting state in a command can be done with the following:
+
+```scala
+lazy val age = settingKey[Int]("Age of a person")
+age in Global := 42
+
+def printAge = Command.command("printAge") { state =>
+  val extracted = Project.extract(state)
+  println("Age setting: " + extracted.structure.data.get(Global, age.key))
+  state
+}
+
+commands += printAge
+```
+
+### Commands construction
+A command needs several things to be constructed, depending on the construction method of course. The fully complete list is:
+
+- The syntax used by the user to invoke the command,
+  - Tab completion for the syntax,
+  - A parser to turn the input into a data structure,
+- The action to perform using the parsed data structure
+  - The action transforms the build State object,
+- Help to provide to the user
+
+```scala
+val action: (State, T) => State = ...
+val parser: State => Parser[T] = ...
+val command: Command = Command("name")(parser)(action)
 ```
 
 ## Serializing Typesafe Configuration to JSON
