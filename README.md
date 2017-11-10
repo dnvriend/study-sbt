@@ -2293,6 +2293,36 @@ lazy val pong = Command.command("pong") { state =>
 commands += pong
 ```
 
+Lets create a simple 'snake' game. First, the snake is not found. You have three commands, 'snake', that just prints a snake and exists simply to be able to store information in the session, `alterSnake` that reads the session for the key in a scope, hence ScopedKey, so (snake in Global) would be a `ScopedKey`, 'a snake (key) in Global scope', and persists to disk a session variable using this task key. Only 'task keys' can be used to persist Session values. The `createSnake` 'creates' a snake by persisting the head of the snake to a session value. This session value can be read by other tasks or commands. So alternatively, the sessionVars can be used to communicate both ways between tasks and commands using the same key; the `Task Key` and the scope that must be used is `Global`.
+
+```scala
+import sjsonnew.BasicJsonProtocol._
+lazy val snake = taskKey[String]("")
+snake in Global := {
+  val log = streams.value.log
+  val str = SessionVar.load((snake in Global).scopedKey, state.value)
+    .getOrElse("not found")
+  log.info(str)
+  str
+}
+
+lazy val alterSnake = Command.command("alterSnake") { state =>
+  val maybeSnake = SessionVar.load((snake in Global).scopedKey, state)
+  maybeSnake.foreach { body =>
+    SessionVar.persist((snake in Global).scopedKey, state, body + "<")
+  }
+  state.log.info(maybeSnake.getOrElse("Snake is still hidden"))
+  state
+}
+
+lazy val createSnake = taskKey[Unit]("")
+createSnake := {
+  SessionVar.persist((snake in Global).scopedKey, state.value, "-:")
+}
+
+commands += alterSnake
+```
+
 A more complex example is below:
 
 ```scala
