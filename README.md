@@ -2723,6 +2723,107 @@ The SessionSettings datatype tracks a few pieces of information that are not per
 
 SessionSettings only tracks this information; setting these values on a SessionSettings object does not apply the changes. In particular, the project has to be reloaded for the additional settings to take effect. Reloading checks the settings for problems like references to non-existing settings and then the settings are reevaluated. The release plugin has a reapply method that shows the proper way to add settings to the current project.
 
+## State Management
+The following options are available for state management:
+
+- SessionVar: The keys are of type ScopedKey[Task[T]], so TaskKeys,
+- storeAs: `t1 := t1.storeAs(t1).value`, also use the sessionVars,
+- keepAs: `t1 := t1.keepAs(t1).value`, also use the sessionVars,
+- State.attributes: The keys are of type AttributeKey[T], so SettingKeys
+- sbt.IO can read and write java.util.Properties to disk
+- java.io.ObjectOutputStream in combination with sbt.IO to read or write (nope),
+- [Jawn](https://github.com/non/jawn) with [sjson-new] to write JSON to a file in combination with IO.write/read,
+- other solutions, needs adding those libraries to the classpath of sbt.
+
+## sjson-new
+[sjson-new](https://github.com/eed3si9n/sjson-new) is a typeclass-based JSON codec. The library uses an indirection approach where a more generic JSON AST is being created and a 'back-end' JSON library can be 'plugged-in' to create the JSON string. Most 'plugged-in' libraries often also provide an AST and parsing/serializing infrastructure. The most obvious disadvantage of using a 'proxy-based' approach like these libraries do is being up-to-date with the latest versions of the plugged libaries.
+
+## sbt Contraband
+[sbt-contraband](https://github.com/sbt/contraband), see the [documentation](http://www.scala-sbt.org/contraband/). Contraband is a description language for your datatypes and APIs and enables to evolve data types over time. It generates either Java classes, or a pseudo case classes in Scala and generates JSON bindings for the datatypes.
+
+## Play-Json
+This library has a great developer experience and is very simple to use. Just add the following to your `project/dependencies.sbt` and you're off:
+
+```bash
+libraryDependencies += "com.typesafe.play" %% "play-json" % "2.6.7"
+```
+
+You can now easily serialize to/from JSON. Create the following file in `project/Person.scala`:
+
+```scala
+import play.api.libs.json.Json
+
+object Person {
+  implicit val format = Json.format[Person]
+}
+case class Person(name: String, age: Int)
+```
+
+and put the following in your build.sbt:
+
+```sbt
+import play.api.libs.json.Json
+
+lazy val write = taskKey[Unit]("")
+write := {
+  val jsonStr: String = Json.toJson(Person("Dennis", 42)).toString
+  IO.write(baseDirectory.value / "person.json", jsonStr)
+  println(jsonStr)
+}
+
+lazy val read = taskKey[Unit]("")
+read := {
+  val person = Json.parse(IO.read(baseDirectory.value / "person.json")).as[Person]
+  println(person)
+}
+```
+
+## Apache Avro and Avro4s
+[avro4s](https://github.com/sksamuel/avro4s) is a typeclass-based library to serialize and deserialize avro records using Apache AVRO and supports schema evolution. Just add the following to your `project/dependencies.sbt` and you're off:
+
+```bash
+libraryDependencies += "com.sksamuel.avro4s" %% "avro4s-core" % "1.8.0"
+```
+
+You can now easily serialize to/from avro records. Create the following file in `project/Person.scala`:
+
+```scala
+case class Person(name: String, age: Int)
+```
+
+and put the following in your build.sbt:
+
+```scala
+import com.sksamuel.avro4s.{AvroInputStream, AvroOutputStream}
+
+lazy val write = taskKey[Unit]("")
+write := {
+  val people = (1 to 10).map { i =>
+    Person("Dennis" + i, 42 + i)
+  }
+  val os = AvroOutputStream.data[Person](baseDirectory.value / "person.avro")
+  people.foreach(os.write)
+  os.flush()
+  os.close()
+}
+
+lazy val read = taskKey[Unit]("")
+read := {
+  val is = AvroInputStream.data[Person](baseDirectory.value / "person.avro")
+  val people: List[Person] = is.iterator.toList
+  is.close()
+  people.foreach(println)
+}
+```
+
+Now change the `Person` case class by adding a new field 'luckyNumbers':
+
+```scala
+case class Person(name: String, age: Int, luckyNumbers: Boolean = false)
+```
+
+Now, `read` the `person.avro` file again. You have schema evolution built-in!
+
 ## intellij sbt plugin
 - [Scala plugin for IntelliJ IDEA 2017.1](https://blog.jetbrains.com/scala/2017/03/23/scala-plugin-for-intellij-idea-2017-1-cleaner-ui-sbt-shell-repl-worksheet-akka-support-and-more/)
 - [Scala plugin Bugs](https://intellij-support.jetbrains.com/hc/en-us/community/topics/200381545-Scala)
