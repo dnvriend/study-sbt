@@ -2,7 +2,7 @@
 A small study on [sbt (the Scala Build Tool)](http://www.scala-sbt.org/).
 
 ## Introduction
-The [Scala Build Tool](http://www.scala-sbt.org/) or sbt for short, is a build tool for building your source code. It is a very advanced tool and basically is just a workflow engine. In contrast to other build tools, scala is very simple, well, if you know just a couple of concepts.
+The [Scala Build Tool](http://www.scala-sbt.org/) or sbt for short, is a build tool for building your source code. It is a very advanced tool and basically is just a workflow engine. In contrast to other build tools, sbt is very simple, well, if you know just a couple of concepts.
 
 ## Build, Projects, Settings, Tasks, Keys, Configurations and Scopes
 Lets introduce the core concepts of our build. When we create a project for example with the following command:
